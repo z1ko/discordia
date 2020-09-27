@@ -1,11 +1,13 @@
 
 mod redis;
 mod anima;
+mod response;
 mod tags;
 
 use crate::{
     redis::Redis,
     anima::Anima,
+    response::generate_response,
     tags::{
         Tag, Filter, Commands
     }
@@ -24,20 +26,15 @@ fn main()
 
     let mut anima = redis.get_anima(59685490).unwrap();
     anima.level += 1;
+
     redis.set_anima(59685490, &anima).unwrap();
-
-    // Ottiene tutti i gruppi di risposte
-    let groups = redis.get_groups().unwrap();
-    println!("{:?}", groups);
-
-    let tags = redis.get_group_tags(&groups[1]).unwrap();
-    println!("{:?}", tags);
+    println!("{:?}", anima);
 
     let filter = tags::Filter::new()
         .tag(Tag::Command(Commands::Ping))
-        .tag(Tag::Anima(59685490));
+        .tag(Tag::Anima(15));
 
-    
-
-    println!("{:?}", anima);
+    if let Some(response) = generate_response(&mut redis, filter).unwrap() {
+        println!("{}", response);
+    }   
 }

@@ -144,12 +144,11 @@ impl Filter {
             let optional = tag.optional();
 
             // Se non è opzionale e manca allora non può passare il filtro
-            if !optional && !contains {
-                return FilterResult::Blocked;
-            }
+            if !optional && !contains { return FilterResult::Blocked;}
 
             // Se è opzionale e non presente allora non aumenta lo score
-            if optional && !contains {
+            if optional && !contains { 
+                println!("VVVVVVVVVVVVVVVVV");
                 continue;
             }
 
@@ -170,14 +169,18 @@ mod tests
     #[test]
     fn filter()
     {
-        let filter = Filter::new()
+        let filter1 = Filter::new()
             .tag(Tag::Command(Commands::Ping))
             .tag(Tag::Anima(59685490));
 
-        let tags = ["cmd:ping".to_string(), "anima:59685490".to_string()];
-        assert_eq!(filter.check(&tags), FilterResult::Passed(2));
+        let filter2 = Filter::new()
+            .tag(Tag::Command(Commands::Ping));
 
-        let tags = ["cmd:ping".to_string()];
-        assert_eq!(filter.check(&tags), FilterResult::Passed(1));
+        let tags1 = ["cmd:ping".to_string(), "anima:59685490".to_string()];
+        let tags2 = ["cmd:ping".to_string()];
+
+        assert_eq!(filter1.check(&tags1), FilterResult::Passed(2));
+        assert_eq!(filter2.check(&tags1), FilterResult::Passed(1));
+        assert_eq!(filter1.check(&tags2), FilterResult::Passed(1));
     }  
 }
