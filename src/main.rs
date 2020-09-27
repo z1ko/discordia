@@ -6,6 +6,9 @@ mod tags;
 use crate::{
     redis::Redis,
     anima::Anima,
+    tags::{
+        Tag, Filter, Commands
+    }
 };
 
 fn main() 
@@ -29,6 +32,12 @@ fn main()
 
     let tags = redis.get_group_tags(&groups[1]).unwrap();
     println!("{:?}", tags);
+
+    let filter = tags::Filter::new()
+        .tag(Tag::Command(Commands::Ping))
+        .tag(Tag::Anima(59685490));
+
+    
 
     println!("{:?}", anima);
 }
