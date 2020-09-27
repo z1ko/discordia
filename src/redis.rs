@@ -3,17 +3,10 @@
  * le connessioni sono singlethread per ora...
  */
 
-mod anima;
-pub use anima::Anima;
-
+use crate::Anima;
 use redis::{
     Commands, Connection, Client, RedisResult
 };
-
-// Struttura contiene una chiave Redis
-pub trait RedisKey {
-    fn key(&self) -> String;
-}
 
 // Rappresenta il server e una fabbrica di DAO
 pub struct Redis 
@@ -37,7 +30,7 @@ impl Redis {
 
     // Ottiene un'anima dal suo id e se necessario la crea
     pub fn get_anima(&mut self, id: u64) -> RedisResult<Anima> {
-        let key = format!("anima@{}", id);
+        let key = format!("anima:{}", id);
 
         // Se non esiste la crea nuova
         if !self.con.exists(&key)? 
@@ -51,17 +44,32 @@ impl Redis {
         let level = self.con.hget(&key, "level")?;
         let exp   = self.con.hget(&key,   "exp")?;
 
-        Ok(Anima::new(&key, money, level, exp))
+        Ok(Anima::new(money, level, exp))
     }
 
     // Salva o aggiorna la nuova anima nel database
-    pub fn set_anima(&mut self, anima: &Anima) -> RedisResult<()> {
-        let key = anima.key();
+    pub fn set_anima(&mut self, id: u64, anima: &Anima) -> RedisResult<()> {
+        let key = format!("anima:{}", id);
 
         self.con.hset(&key, "money", anima.money)?;
         self.con.hset(&key, "level", anima.level)?;
         self.con.hset(&key,   "exp",   anima.exp)?;
 
         Ok(())
+    }
+
+    // Ottiene le risposte conosciute
+    pub fn get_groups(&mut self) -> RedisResult<Vec<String>> {
+        Ok(self.con.smembers("responses")?)
+    }
+
+    // Ottiene le tag di un gruppo
+    pub fn get_group_tags(&mut self, group: &String) -> RedisResult<Vec<String>> {    
+        Ok(self.con.smembers(format!("{}/tags", group))?)
+    }
+
+    // Ottiene le risposte di un gruppo
+    pub fn get_group_data(&mut self, group: &String) -> RedisResult<Vec<String>> {
+        Ok(self.con.smembers(format!("{}/data", group))?)
     }
 }
