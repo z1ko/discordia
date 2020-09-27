@@ -1,5 +1,9 @@
 # **Discordia**
-![[Kan Liu](https://www.artstation.com/666kart)](/data/icon/avatar.png)
+<a href="https://www.artstation.com/666kart">
+    <p align="center">
+    <img src="/data/icon/avatar.png"/>
+    </p>
+</a>
 
 This is a simple Discord Bot created in [Rust](https://www.rust-lang.org/) using [serenity-rs](https://github.com/serenity-rs/serenity) to be used in conjunction with a [Redis](https://redis.io/) server.
 
