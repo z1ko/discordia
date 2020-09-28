@@ -10,3 +10,10 @@ edition = "2018"
 redis = "0.17.0"
 dotenv = "0.15.0"
 rand = "0.7.3"
+tokio = { version = "0.2.22", features = ["macros", "tcp", "dns", "io-util"] }
+
+# Bella twilight
+twilight-cache-inmemory = "0.1"
+twilight-gateway = "0.1"
+twilight-http = "0.1"
+twilight-model = "0.1"
