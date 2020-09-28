@@ -3,9 +3,10 @@
  * le connessioni sono singlethread per ora...
  */
 
+
 use crate::Anima;
 use redis::{
-    Commands, Connection, Client, RedisResult
+    Commands, Client, RedisResult, Connection
 };
 
 // Rappresenta il server e una fabbrica di DAO
@@ -22,10 +23,7 @@ impl Redis {
         let client = Client::open(url)?;
         let con = client.get_connection()?;
 
-        Ok(Self { 
-            client, 
-            con
-        })
+        Ok(Self { client, con })
     }
 
     // Ottiene un'anima dal suo id e se necessario la crea

@@ -2,10 +2,17 @@
 mod redis;
 mod anima;
 mod response;
+mod commands;
+mod formatting;
 mod tags;
 
+#[macro_use] 
+extern crate prettytable;
+
+use std::sync::Arc;
 use std::{env, error::Error};
 use tokio::stream::StreamExt;
+use tokio::sync::Mutex;
 
 use twilight_gateway::{
     cluster::{
@@ -40,8 +47,8 @@ async fn main() -> Failable<()> {
     let token = std::env::var("DISCORD_TOKEN").expect("DISCORD_TOKEN not found in env");
 
     print!("Connecting to Redis server at {} ... ", redis_url);
-    let mut redis = Redis::connect(&redis_url)
-        .expect("Error connecting to Redis server");
+    let mut redis = Arc::new(Mutex::new(Redis::connect(&redis_url)
+        .expect("Error connecting to Redis server")));
     println!("[OK]");
 
     // Crea quante shard vuole discord
@@ -81,19 +88,23 @@ async fn main() -> Failable<()> {
     {
         // Processa evento in un altro thread
         cache.update(&event);
-        tokio::spawn(message(shard_id, event, http.clone()));
+        tokio::spawn(message(shard_id, event, Arc::clone(&redis), http.clone()));
     }
 
     Ok(())
 }
 
 // Handler dei messaggi
-async fn message(shard_id: u64, event: Event, http: HttpClient) -> Failable<()> {
+async fn message(shard_id: u64, event: Event, redis: Arc<Mutex<Redis>>, http: HttpClient) -> Failable<()> {
     match event {
         
         // Nuovo messaggio ricevuto
-        Event::MessageCreate(msg) if msg.content == "!ping" => {
-            http.create_message(msg.channel_id).content("Pong!")?.await?;
+        Event::MessageCreate(msg)  => {
+            match msg.content.as_str() {
+                ".ping"  => commands::misc::ping(&msg, redis, http).await?,
+                ".stats" => commands::misc::stats(&msg, redis, http).await?,
+                _ => { }
+            }
         }
 
         Event::ShardConnected(_) =>
