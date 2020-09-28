@@ -19,3 +19,6 @@ twilight-cache-inmemory = "0.1"
 twilight-gateway = "0.1"
 twilight-http = "0.1"
 twilight-model = "0.1"
+
+twilight-lavalink = "0.1"
+reqwest = { features = ["json"], version = "0.10" }

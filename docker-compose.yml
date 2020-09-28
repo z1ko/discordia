@@ -6,11 +6,15 @@ services:
         container_name: database
         image: redis
         command: redis-server --appendonly yes
+        volumes: 
+            - "C:/Redis/Discord:/data"
         ports:
             - "6379:6379"
 
     lavalink:
         container_name: lavalink
-        build: ./lavalink
+        image: fredboat/lavalink
+        volumes: 
+            - "./lavalink:/opt/Lavalink"
         ports:
             - "2333:2333"

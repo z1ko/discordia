@@ -1,4 +1,14 @@
 
+// Perché i terminali non sono mai abbastanza belli
+static LOGO: &str = r#"
+                  ·▄▄▄▄  ▪  .▄▄ ·  ▄▄·       ▄▄▄  ·▄▄▄▄  ▪   ▄▄▄· 
+                  ██▪ ██ ██ ▐█ ▀. ▐█ ▌▪▪     ▀▄ █·██▪ ██ ██ ▐█ ▀█ 
+                  ▐█· ▐█▌▐█·▄▀▀▀█▄██ ▄▄ ▄█▀▄ ▐▀▀▄ ▐█· ▐█▌▐█·▄█▀▀█ 
+                  ██. ██ ▐█▌▐█▄▪▐█▐███▌▐█▌.▐▌▐█•█▌██. ██ ▐█▌▐█ ▪▐▌
+                  ▀▀▀▀▀• ▀▀▀ ▀▀▀▀ ·▀▀▀  ▀█▄▀▪.▀  ▀▀▀▀▀▀• ▀▀▀ ▀  ▀ 
+                                                    by Z1ko
+"#;
+
 mod redis;
 mod anima;
 mod response;
@@ -9,8 +19,11 @@ mod tags;
 #[macro_use] 
 extern crate prettytable;
 
+use std::str::FromStr;
+use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 use std::sync::Arc;
 use std::{env, error::Error};
+
 use tokio::stream::StreamExt;
 use tokio::sync::Mutex;
 
@@ -23,6 +36,7 @@ use twilight_gateway::{
 
 use twilight_model::gateway::Intents;
 use twilight_http::Client as HttpClient;
+use twilight_lavalink::{Lavalink};
 use twilight_cache_inmemory::{
     EventType, InMemoryCache
 };
@@ -43,34 +57,54 @@ type Failable<T> = Result<T, Box<dyn Error + Send + Sync>>;
 async fn main() -> Failable<()> {
     dotenv::dotenv().ok();
 
-    let redis_url = std::env::var("REDIS_DATABASE_URL").expect("REDIS_DATABASE_URL not found in env");
-    let token = std::env::var("DISCORD_TOKEN").expect("DISCORD_TOKEN not found in env");
+    let redis_url = std::env::var("REDIS_URL")?;
+    let token = std::env::var("DISCORD_TOKEN")?;   
+    
+    let lavalink_psw = std::env::var("LAVALINK_PSW")?;
+    let lavalink_url = std::env::var("LAVALINK_URL")?;
+    let lavalink_socket = SocketAddr::from_str(&lavalink_url)?;
 
-    print!("Connecting to Redis server at {} ... ", redis_url);
+    println!("\n{}", LOGO);
+    println!("\n================================= INITIALIZATION =================================\n");
+
+    print!("[INFO] Connecting to Redis server at {} ... ", redis_url);
     let mut redis = Arc::new(Mutex::new(Redis::connect(&redis_url)
         .expect("Error connecting to Redis server")));
     println!("[OK]");
 
     // Crea quante shard vuole discord
     let scheme = ShardScheme::Auto;
+    let shard_count = 1;
     
-    print!("Creating shard cluster ... ");
+    print!("[INFO] Creating shard cluster with {} shards ... ", shard_count);
     let cluster = Cluster::builder(&token)
         .shard_scheme(scheme)
         .intents(Intents::GUILD_MESSAGES)
         .build().await?;
     println!("[OK]");
     
-    // Crea client http per richieste all'API
+    // Crea client http per richieste all'API e ottiene l'id
+    // del bot
     let http = HttpClient::new(&token);
+    let user = http.current_user().await?;
+
+    // Creazione collegamento a lavalink
+    print!("[INFO] Connecting to Lavalink at {} ... ", lavalink_socket);
+    let lavalink = Lavalink::new(user.id, shard_count);
+    lavalink.add(lavalink_socket, lavalink_psw)
+        .await.expect("Error connecting Lavalink");
+    println!("[OK]");
 
     // Fai partile le shard in background
-    print!("Starting shard cluster ... ");
+    print!("[INFO] Starting shard cluster ... ");
     let cluster_core = cluster.clone();
     tokio::spawn(async move {
         cluster_core.up().await;
     });
     println!("[OK]");
+
+    println!("\n                                        Now things should just work... I hope :)");
+    println!("==================================================================================");
 
     // La cache per ora contiene solo i messaggi
     let cache = InMemoryCache::builder()
@@ -86,16 +120,18 @@ async fn main() -> Failable<()> {
     let mut events = cluster.events();
     while let Some((shard_id, event)) = events.next().await 
     {
-        // Processa evento in un altro thread
         cache.update(&event);
-        tokio::spawn(message(shard_id, event, Arc::clone(&redis), http.clone()));
+        lavalink.process(&event).await?;
+
+        // Processa evento in un altro thread
+        tokio::spawn(message(shard_id, event, Arc::clone(&redis), http.clone(), lavalink.clone()));
     }
 
     Ok(())
 }
 
 // Handler dei messaggi
-async fn message(shard_id: u64, event: Event, redis: Arc<Mutex<Redis>>, http: HttpClient) -> Failable<()> {
+async fn message(shard_id: u64, event: Event, redis: Arc<Mutex<Redis>>, http: HttpClient, lavalink: Lavalink) -> Failable<()> {
     match event {
         
         // Nuovo messaggio ricevuto
@@ -131,7 +167,7 @@ async fn message(shard_id: u64, event: Event, redis: Arc<Mutex<Redis>>, http: Ht
         }
 
         Event::ShardConnected(_) =>
-            println!("Connected on shard {}", shard_id),
+            println!("[INFO] Shard {} is connected", shard_id),
 
         // Other events here...
         _ => {}
