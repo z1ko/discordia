@@ -16,7 +16,7 @@ use crate::{
 // Ricerca il database per ottenere una risposta adeguata al filtro
 pub fn generate_response(redis: &mut Redis, filter: Filter) -> RedisResult<Option<String>> {
     
-    let mut winners: Vec<(String, u32)> = Vec::default();
+    let mut winners: Vec<(String, i32)> = Vec::default();
     let mut winner_score = 1;
     
     // Ottiene le tag di tutti i gruppi e salva quelli che hanno successo

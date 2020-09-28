@@ -24,5 +24,17 @@ fn main()
         .expect("Error connecting to Redis server");
     println!("[OK]");
 
-    
+    let mut anima = redis.get_anima(59685490).unwrap();
+    anima.level += 1;
+
+    redis.set_anima(59685490, &anima).unwrap();
+    println!("{:?}", anima);
+
+    let filter = tags::Filter::new()
+        .tag(Tag::Command(Commands::Ping))
+        .tag(Tag::Anima(15));
+
+    if let Some(response) = generate_response(&mut redis, filter).unwrap() {
+        println!("{}", response);
+    }   
 }

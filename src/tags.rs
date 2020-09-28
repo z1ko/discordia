@@ -106,6 +106,13 @@ impl Tag {
     }
 }
 
+// Indica se la stringa corrisponde alla tag
+impl std::cmp::PartialEq<String> for Tag {
+    fn eq(&self, other: &String) -> bool {
+        self.string() == *other
+     }
+}
+
 // Un filtro delle tag, facilita il filtraggio
 #[derive(Debug)]
 pub struct Filter 
@@ -117,7 +124,7 @@ pub struct Filter
 #[derive(Debug, PartialEq)]
 pub enum FilterResult 
 {
-    Passed(u32),  // Le tag sono valide per questo filtro
+    Passed(i32),  // Le tag sono valide per questo filtro
     Blocked       // Le tag non sono compatibili  
 }
 
@@ -137,7 +144,7 @@ impl Filter {
     // Analizza un'insieme di stringhe tag
     pub fn check(&self, strings: &[String]) -> FilterResult 
     {
-        let mut score = 0;
+        let mut score: i32 = 0;
         for tag in &self.tags 
         {
             let contains = strings.contains(&tag.string());
@@ -148,12 +155,13 @@ impl Filter {
 
             // Se è opzionale e non presente allora non aumenta lo score
             if optional && !contains { 
-                println!("VVVVVVVVVVVVVVVVV");
+                println!("Optional value not found: {}", tag.string());
+                score -= 1;
                 continue;
             }
 
-            // Tutti gli altri casi
-            score += 1;
+            // Tutti gli altri casi aumenta il punteggio
+            score += 2;
         }
 
         FilterResult::Passed(score)
