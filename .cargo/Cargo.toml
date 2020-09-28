@@ -1,0 +1,5 @@
+[build]
+
+[target.armv7-unknown-linux-gnueabihf]
+linker = "C:/Toolchains/gcc-arm-9.2-2019.12-mingw-w64-i686-arm-none-linux-gnueabihf/bin/arm-none-linux-gnueabihf-gcc"
+target-dir = "target/cross/raspi"

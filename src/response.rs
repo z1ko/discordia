@@ -14,7 +14,7 @@ use crate::{
 };
 
 // Ricerca il database per ottenere una risposta adeguata al filtro
-pub async fn generate_response(redis: &mut Redis, filter: Filter) -> RedisResult<Option<String>> {
+pub fn generate_response(redis: &mut Redis, filter: Filter) -> RedisResult<Option<String>> {
     
     let mut winners: Vec<(String, i32)> = Vec::default();
     let mut winner_score = 1;

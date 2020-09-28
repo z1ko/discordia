@@ -100,6 +100,29 @@ async fn message(shard_id: u64, event: Event, redis: Arc<Mutex<Redis>>, http: Ht
         
         // Nuovo messaggio ricevuto
         Event::MessageCreate(msg)  => {
+
+            // Controlla che non sia il comando di un altro bot e nel caso lo punisce
+            if msg.content.starts_with("!") || msg.content.starts_with("-") {
+                let mut redis = redis.lock().await;
+
+                println!("A");
+
+                let filter = Filter::new().tag(Tag::UsedOtherBot);
+                if let Ok(Some(response)) = response::generate_response(&mut redis, filter) {
+                    http.create_message(msg.channel_id).content(response)?.await?;
+                }
+
+                // Abbassa l'exp del bastardo
+                let exp_damage: i32 = 50;
+
+                let mut anima = redis.get_anima(msg.author.id.0).unwrap();
+                anima.exp = std::cmp::max(0_i32, anima.exp as i32 - exp_damage) as u32;
+                redis.set_anima(msg.author.id.0, &anima).unwrap();
+
+                let damage = formatting::negative(&format!("{} exp", exp_damage));
+                http.create_message(msg.channel_id).content(damage)?.await?;
+            }
+
             match msg.content.as_str() {
                 ".ping"  => commands::misc::ping(&msg, redis, http).await?,
                 ".stats" => commands::misc::stats(&msg, redis, http).await?,

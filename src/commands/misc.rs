@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::error::Error;
 use tokio::sync::Mutex;
 
-use prettytable::{Table, Row, Cell};
+use prettytable::{Table, Row, Cell, format};
 use twilight_model::user::User;
 use twilight_model::gateway::{
     payload::MessageCreate,
@@ -36,6 +36,8 @@ pub async fn stats(msg: &MessageCreate, redis: Arc<Mutex<Redis>>, http: HttpClie
     };
 
     let mut table = Table::new();
+    table.set_format(*format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
+
     table.add_row(row![    &msg.author.name]);
     table.add_row(row!["money", anima.money]);
     table.add_row(row!["level", anima.level]);
