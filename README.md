@@ -3,7 +3,7 @@ This is a simple Discord Bot created in [Rust](https://www.rust-lang.org/) using
 
 <a href="https://www.artstation.com/666kart">
     <p align="center">
-    <img src="/data/icon/avatar.png"/>
+    <img src="/data/banner.png"/>
     </p>
 </a>
 
