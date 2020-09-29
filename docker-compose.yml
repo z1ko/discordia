@@ -6,8 +6,8 @@ services:
         container_name: database
         image: redis
         command: redis-server --appendonly yes
-        volumes: 
-            - "C:/Redis/Discord:/data"
+        #volumes: 
+        #    - "C:/Redis/Discord:/data"
         ports:
             - "6379:6379"
 
@@ -15,7 +15,9 @@ services:
         container_name: lavalink
         image: fredboat/lavalink:dev
         network_mode: host
-        volumes: 
-            - "C:/Projects/discordia/lavalink:/opt/Lavalink"
+        volumes:
+            - "./lavalink/application.yml:/opt/Lavalink/application.yml"        
         ports:
-            - "127.0.0.1:2333:2333"
+            - "2333:2333"
+            - "80:80"
+            - "8080:8080"
