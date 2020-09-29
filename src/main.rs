@@ -23,9 +23,12 @@ use std::str::FromStr;
 use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 use std::sync::Arc;
 use std::{env, error::Error};
+use std::io::{self, Write};
 
 use tokio::stream::StreamExt;
 use tokio::sync::Mutex;
+
+use reqwest::Client as ReqwestClient;
 
 use twilight_gateway::{
     cluster::{
@@ -68,6 +71,8 @@ async fn main() -> Failable<()> {
     println!("\n================================= INITIALIZATION =================================\n");
 
     print!("[INFO] Connecting to Redis server at {} ... ", redis_url);
+    std::io::stdout().flush().unwrap();
+    
     let mut redis = Arc::new(Mutex::new(Redis::connect(&redis_url)
         .expect("Error connecting to Redis server")));
     println!("[OK]");
@@ -77,26 +82,32 @@ async fn main() -> Failable<()> {
     let shard_count = 1;
     
     print!("[INFO] Creating shard cluster with {} shards ... ", shard_count);
+    std::io::stdout().flush().unwrap();
+
     let cluster = Cluster::builder(&token)
         .shard_scheme(scheme)
         .intents(Intents::GUILD_MESSAGES)
         .build().await?;
     println!("[OK]");
     
-    // Crea client http per richieste all'API e ottiene l'id
-    // del bot
+    // Crea client http per richieste all'API e ottiene l'id del bot
     let http = HttpClient::new(&token);
+    let reqw = ReqwestClient::new();
     let user = http.current_user().await?;
 
+    print!("[INFO] Connecting to Lavalink at {} ... ", lavalink_socket); 
+    std::io::stdout().flush().unwrap();
+    
     // Creazione collegamento a lavalink
-    print!("[INFO] Connecting to Lavalink at {} ... ", lavalink_socket);
     let lavalink = Lavalink::new(user.id, shard_count);
     lavalink.add(lavalink_socket, lavalink_psw)
         .await.expect("Error connecting Lavalink");
     println!("[OK]");
 
-    // Fai partile le shard in background
     print!("[INFO] Starting shard cluster ... ");
+    std::io::stdout().flush().unwrap();
+    
+    // Fai partile le shard in background
     let cluster_core = cluster.clone();
     tokio::spawn(async move {
         cluster_core.up().await;
@@ -124,14 +135,17 @@ async fn main() -> Failable<()> {
         lavalink.process(&event).await?;
 
         // Processa evento in un altro thread
-        tokio::spawn(message(shard_id, event, Arc::clone(&redis), http.clone(), lavalink.clone()));
+        tokio::spawn(message(shard_id, event, cluster.clone(), Arc::clone(&redis),
+            http.clone(), lavalink.clone()));
     }
 
     Ok(())
 }
 
 // Handler dei messaggi
-async fn message(shard_id: u64, event: Event, redis: Arc<Mutex<Redis>>, http: HttpClient, lavalink: Lavalink) -> Failable<()> {
+async fn message(shard_id: u64, event: Event, cluster: Cluster, redis: Arc<Mutex<Redis>>,
+    http: HttpClient, lavalink: Lavalink) -> Failable<()> 
+{
     match event {
         
         // Nuovo messaggio ricevuto
@@ -140,8 +154,6 @@ async fn message(shard_id: u64, event: Event, redis: Arc<Mutex<Redis>>, http: Ht
             // Controlla che non sia il comando di un altro bot e nel caso lo punisce
             if msg.content.starts_with("!") || msg.content.starts_with("-") {
                 let mut redis = redis.lock().await;
-
-                println!("A");
 
                 let filter = Filter::new().tag(Tag::UsedOtherBot);
                 if let Ok(Some(response)) = response::generate_response(&mut redis, filter) {
@@ -157,11 +169,28 @@ async fn message(shard_id: u64, event: Event, redis: Arc<Mutex<Redis>>, http: Ht
 
                 let damage = formatting::negative(&format!("{} exp", exp_damage));
                 http.create_message(msg.channel_id).content(damage)?.await?;
+
+
+                // Non era un nostro comando...
+                return Ok(());
             }
 
-            match msg.content.as_str() {
+            let partitions = msg.content.split(' ').collect::<Vec<&str>>(); 
+            match partitions[0] // comando
+            {
                 ".ping"  => commands::misc::ping(&msg, redis, http).await?,
                 ".stats" => commands::misc::stats(&msg, redis, http).await?,
+                ".play"  => commands::music::play(&msg, lavalink, http).await?,
+                ".join"  => 
+                {
+                    let shard = cluster.shard(shard_id).unwrap();
+                    commands::music::join(&msg, shard, http).await?;
+                }
+                ".leave" => 
+                {
+                    let shard = cluster.shard(shard_id).unwrap();
+                    commands::music::leave(&msg, shard, lavalink, http).await?;
+                }
                 _ => { }
             }
         }

@@ -6,6 +6,7 @@ use twilight_http::Client as HttpClient;
 use twilight_model::gateway::payload::MessageCreate;
 
 pub mod misc;
+pub mod music;
 
 // Permette di mantenere una funzione async
 type AsyncFn<T> = 

@@ -13,8 +13,9 @@ services:
 
     lavalink:
         container_name: lavalink
-        image: fredboat/lavalink
+        image: fredboat/lavalink:dev
+        network_mode: host
         volumes: 
-            - "./lavalink:/opt/Lavalink"
+            - "C:/Projects/discordia/lavalink:/opt/Lavalink"
         ports:
-            - "2333:2333"
+            - "127.0.0.1:2333:2333"
