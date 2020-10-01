@@ -45,6 +45,8 @@ pub async fn join(msg: &MessageCreate, shard_id: u64, state: CmdState) -> Failab
             state.http.create_message(msg.channel_id)
                 .content(format!("Collegata al canale <#{:?}>!", channel_id))?
                 .await?;
+
+            return Ok(CmdResult::Success(5));
         } 
         else
         {
@@ -52,6 +54,8 @@ pub async fn join(msg: &MessageCreate, shard_id: u64, state: CmdState) -> Failab
             state.http.create_message(msg.channel_id)
                 .content("Il canale specificato non è corretto")?
                 .await?;
+
+            return Ok(CmdResult::Failure);
         }
     }
     else
@@ -60,9 +64,9 @@ pub async fn join(msg: &MessageCreate, shard_id: u64, state: CmdState) -> Failab
         state.http.create_message(msg.channel_id)
             .content("Non hai specificato il canale")?
             .await?;
-    }
 
-    Ok(CmdResult::Skip)
+        return Ok(CmdResult::Failure);
+    }
 }
 
 // Lascia il canale vocale
@@ -103,6 +107,8 @@ pub async fn leave(msg: &MessageCreate, shard_id: u64, state: CmdState) -> Faila
         state.http.create_message(msg.channel_id)
             .content("Non sto riproducendo musica in quel canale")?
             .await?;
+
+        return Ok(CmdResult::Failure);
     }
 
     Ok(CmdResult::Skip)
@@ -143,6 +149,9 @@ pub async fn play(msg: &MessageCreate, state: CmdState) -> Failable<CmdResult> {
                 state.http.create_message(msg.channel_id)
                     .content(content)?
                     .await?;
+
+                // Successo
+                return Ok(CmdResult::Success(100));
             }
             else
             {
@@ -158,6 +167,8 @@ pub async fn play(msg: &MessageCreate, state: CmdState) -> Failable<CmdResult> {
             state.http.create_message(msg.channel_id)
                     .content("Non sono in un canale vocale...")?
                     .await?;
+
+            return Ok(CmdResult::Failure);
         }
     }
     else
@@ -166,7 +177,9 @@ pub async fn play(msg: &MessageCreate, state: CmdState) -> Failable<CmdResult> {
         state.http.create_message(msg.channel_id)
             .content("Non hai specificato cosa riprodurre")?
             .await?;
+
+        return Ok(CmdResult::Failure);
     }
 
-    Ok(CmdResult::Success(100))
+    Ok(CmdResult::Skip)
 }
