@@ -172,13 +172,13 @@ fn handle_event(shard_id: u64, event: Event, state: CmdState) -> Failable<()> {
         {
             // Se usa un altro bot
             if msg.content.starts_with("!") || msg.content.starts_with("-") {
-                tokio::spawn(handle_other_bot_use((*msg).clone(), state.clone()));
+                tokio::spawn(spawn_handle_other_bot_use((*msg).clone(), state.clone()));
                 return Ok(());
             }
 
             // Se è un comando lo smista
             if msg.content.starts_with(".") {
-                tokio::spawn(handle_command((*msg).clone(), shard_id, state.clone()));
+                tokio::spawn(spawn_handle_command((*msg).clone(), shard_id, state.clone()));
             }
         },
 
@@ -190,6 +190,19 @@ fn handle_event(shard_id: u64, event: Event, state: CmdState) -> Failable<()> {
     }
 
     Ok(())
+}
+
+
+async fn spawn_handle_other_bot_use(msg: MessageCreate, state: CmdState) {
+    if let Err(why) = handle_other_bot_use(msg, state).await {
+        eprintln!("[ERROR]: {}", why);
+    }
+}
+
+async fn spawn_handle_command(msg: MessageCreate, shard_id: u64, state: CmdState) {
+    if let Err(why) = handle_command(msg, shard_id, state).await {
+        eprintln!("[ERROR]: {}", why);
+    }
 }
 
 // Insulta l'utente e rimuove esperienza
@@ -213,9 +226,6 @@ async fn handle_other_bot_use(msg: MessageCreate, state: CmdState) -> Failable<(
 
     Ok(())
 } 
-
-// Quanto aumentare l'exp dell'utente dopo un comando con successo
-const CMD_EXP_GAIN: i32 = 100;
 
 // Smista comandi e in base al risultato aumenta exp utente
 async fn handle_command(msg: MessageCreate, shard_id: u64, state: CmdState) -> Failable<()> {

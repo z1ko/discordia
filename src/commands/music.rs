@@ -125,7 +125,7 @@ pub async fn play(msg: &MessageCreate, state: CmdState) -> Failable<CmdResult> {
         println!("[INFO] Ricerca di \"{}\"", search);
 
         let guild_id = msg.guild_id.unwrap();
-        if let Some(player) = state.lavalink.players().get(&guild_id) {
+        if let Ok(player) = state.lavalink.player(guild_id).await {
             println!("[INFO] Lavalink player found for guild {}", guild_id);
 
             // Ricerca il link nel web tramite lavalink
