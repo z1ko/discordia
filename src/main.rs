@@ -74,7 +74,7 @@ async fn main() -> Failable<()> {
     dotenv::dotenv().ok();
 
     let redis_url = std::env::var("REDIS_URL")?;
-    let token = "NzU2MDcxNzQyOTU4NjAwMjkz.X2Mgrg.9xEU6HMHCACEQ81znCgVNa7Fcow".to_string();//std::env::var("DISCORD_TOKEN")?;   
+    let token = std::env::var("DISCORD_TOKEN")?;   
     
     let lavalink_psw = std::env::var("LAVALINK_PSW")?;
     let lavalink_url = std::env::var("LAVALINK_URL")?;
@@ -108,7 +108,6 @@ async fn main() -> Failable<()> {
     let reqwest = ReqwestClient::new();
     let user = http.current_user().await?;
 
-    /*
     print!("[INFO] Connecting to Lavalink at {} ... ", lavalink_socket); 
     std::io::stdout().flush().unwrap();
     
@@ -117,7 +116,6 @@ async fn main() -> Failable<()> {
     lavalink.add(lavalink_socket, lavalink_psw)
         .await.expect("Error connecting Lavalink");
     println!("[OK]");
-    */
 
     print!("[INFO] Starting shard cluster ... ");
     std::io::stdout().flush().unwrap();
@@ -151,7 +149,7 @@ async fn main() -> Failable<()> {
     while let Some((shard_id, event)) = events.next().await 
     {
         cache.update(&event);
-        //lavalink.process(&event).await?;
+        lavalink.process(&event).await?;
 
         // Smista eventi
         handle_event(shard_id, event, state.clone())?;
