@@ -6,8 +6,8 @@ services:
         container_name: database
         image: redis
         command: redis-server --appendonly yes
-        #volumes: 
-        #    - "C:/Redis/Discord:/data"
+        volumes: 
+            - "C:/Redis/Discord:/data"
         ports:
             - "6379:6379"
 

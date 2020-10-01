@@ -13,12 +13,15 @@ mod redis;
 mod anima;
 mod response;
 mod commands;
-mod formatting;
 mod tags;
+mod embed;
+mod utils;
 
 #[macro_use] 
 extern crate prettytable;
 
+use twilight_model::id::ChannelId;
+use twilight_model::gateway::payload::MessageCreate;
 use std::str::FromStr;
 use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 use std::sync::Arc;
@@ -46,7 +49,17 @@ use twilight_cache_inmemory::{
 
 use crate::{
     redis::Redis,
-    anima::Anima,
+    anima::{
+        exp::{
+            LevelChange,
+            Levelling
+        },
+        Anima
+    },
+    commands::{
+        state::CmdState,
+        CmdResult,
+    },
     response::generate_response,
     tags::{
         Tag, Filter, Commands
@@ -61,7 +74,7 @@ async fn main() -> Failable<()> {
     dotenv::dotenv().ok();
 
     let redis_url = std::env::var("REDIS_URL")?;
-    let token = std::env::var("DISCORD_TOKEN")?;   
+    let token = "NzU2MDcxNzQyOTU4NjAwMjkz.X2Mgrg.9xEU6HMHCACEQ81znCgVNa7Fcow".to_string();//std::env::var("DISCORD_TOKEN")?;   
     
     let lavalink_psw = std::env::var("LAVALINK_PSW")?;
     let lavalink_url = std::env::var("LAVALINK_URL")?;
@@ -73,7 +86,7 @@ async fn main() -> Failable<()> {
     print!("[INFO] Connecting to Redis server at {} ... ", redis_url);
     std::io::stdout().flush().unwrap();
     
-    let mut redis = Arc::new(Mutex::new(Redis::connect(&redis_url)
+    let redis = Arc::new(Mutex::new(Redis::connect(&redis_url)
         .expect("Error connecting to Redis server")));
     println!("[OK]");
 
@@ -81,7 +94,7 @@ async fn main() -> Failable<()> {
     let scheme = ShardScheme::Auto;
     let shard_count = 1;
     
-    print!("[INFO] Creating shard cluster with {} shards ... ", shard_count);
+    print!("[INFO] Creating shard cluster using token ... ");
     std::io::stdout().flush().unwrap();
 
     let cluster = Cluster::builder(&token)
@@ -92,9 +105,10 @@ async fn main() -> Failable<()> {
     
     // Crea client http per richieste all'API e ottiene l'id del bot
     let http = HttpClient::new(&token);
-    let reqw = ReqwestClient::new();
+    let reqwest = ReqwestClient::new();
     let user = http.current_user().await?;
 
+    /*
     print!("[INFO] Connecting to Lavalink at {} ... ", lavalink_socket); 
     std::io::stdout().flush().unwrap();
     
@@ -103,6 +117,7 @@ async fn main() -> Failable<()> {
     lavalink.add(lavalink_socket, lavalink_psw)
         .await.expect("Error connecting Lavalink");
     println!("[OK]");
+    */
 
     print!("[INFO] Starting shard cluster ... ");
     std::io::stdout().flush().unwrap();
@@ -128,79 +143,103 @@ async fn main() -> Failable<()> {
         .build();
 
     // Ottiene messaggi dal sink del cluster
-    let mut events = cluster.events();
+    let cluster_core = cluster.clone(); 
+    let mut events = cluster_core.events();
+
+    // Template dello stato usabile dei comandi
+    let state = CmdState { redis, cluster, http, reqwest };
     while let Some((shard_id, event)) = events.next().await 
     {
         cache.update(&event);
-        lavalink.process(&event).await?;
+        //lavalink.process(&event).await?;
 
-        // Processa evento in un altro thread
-        tokio::spawn(message(shard_id, event, cluster.clone(), Arc::clone(&redis),
-            http.clone(), lavalink.clone()));
+        // Smista eventi
+        handle_event(shard_id, event, state.clone())?;
     }
 
     Ok(())
 }
 
-// Handler dei messaggi
-async fn message(shard_id: u64, event: Event, cluster: Cluster, redis: Arc<Mutex<Redis>>,
-    http: HttpClient, lavalink: Lavalink) -> Failable<()> 
-{
-    match event {
-        
-        // Nuovo messaggio ricevuto
-        Event::MessageCreate(msg)  => {
-
-            // Controlla che non sia il comando di un altro bot e nel caso lo punisce
+// Smista gli eventi e spawna i thread nel caso di comando
+fn handle_event(shard_id: u64, event: Event, state: CmdState) -> Failable<()> {
+    match event
+    {
+        // Nuovo messaggio
+        Event::MessageCreate(msg) => 
+        {
+            // Se usa un altro bot
             if msg.content.starts_with("!") || msg.content.starts_with("-") {
-                let mut redis = redis.lock().await;
-
-                let filter = Filter::new().tag(Tag::UsedOtherBot);
-                if let Ok(Some(response)) = response::generate_response(&mut redis, filter) {
-                    http.create_message(msg.channel_id).content(response)?.await?;
-                }
-
-                // Abbassa l'exp del bastardo
-                let exp_damage: i32 = 50;
-
-                let mut anima = redis.get_anima(msg.author.id.0).unwrap();
-                anima.exp = std::cmp::max(0_i32, anima.exp as i32 - exp_damage) as u32;
-                redis.set_anima(msg.author.id.0, &anima).unwrap();
-
-                let damage = formatting::negative(&format!("{} exp", exp_damage));
-                http.create_message(msg.channel_id).content(damage)?.await?;
-
-
-                // Non era un nostro comando...
+                tokio::spawn(handle_other_bot_use((*msg).clone(), state.clone()));
                 return Ok(());
             }
 
-            let partitions = msg.content.split(' ').collect::<Vec<&str>>(); 
-            match partitions[0] // comando
-            {
-                ".ping"  => commands::misc::ping(&msg, redis, http).await?,
-                ".stats" => commands::misc::stats(&msg, redis, http).await?,
-                ".play"  => commands::music::play(&msg, lavalink, http).await?,
-                ".join"  => 
-                {
-                    let shard = cluster.shard(shard_id).unwrap();
-                    commands::music::join(&msg, shard, http).await?;
-                }
-                ".leave" => 
-                {
-                    let shard = cluster.shard(shard_id).unwrap();
-                    commands::music::leave(&msg, shard, lavalink, http).await?;
-                }
-                _ => { }
+            // Se è un comando lo smista
+            if msg.content.starts_with(".") {
+                tokio::spawn(handle_command((*msg).clone(), state.clone()));
             }
-        }
+        },
 
-        Event::ShardConnected(_) =>
+        // Shard connessa o riconnessa al server
+        Event::ShardConnected(_) => 
             println!("[INFO] Shard {} is connected", shard_id),
 
-        // Other events here...
-        _ => {}
+        _ => { /* TODO */ }
     }
 
+    Ok(())
+}
+
+// Insulta l'utente e rimuove esperienza
+async fn handle_other_bot_use(msg: MessageCreate, state: CmdState) -> Failable<()> {
+    let mut redis = state.redis.lock().await;
+    
+    let exp_damage: i32 = 50;
+
+    // Ottiene risposta per l'utente e se questa esiste
+    // la invia alla chat discrod
+    let filter = Filter::new().tag(Tag::UsedOtherBot);
+    let response = match response::generate_response(&mut redis, filter)? {
+        Some(response) => response,
+        None => String::default(),
+    };
+
+    // Ottiene anima e decrementa l'exp
+    let mut anima = redis.get_anima(msg.author.id.0).unwrap();
+    utils::decrease_exp(&mut redis, state.http, &mut anima, &msg, &response, exp_damage).await?;
+    redis.set_anima(msg.author.id.0, &anima).unwrap();
+
+    Ok(())
+} 
+
+// Quanto aumentare l'exp dell'utente dopo un comando con successo
+const CMD_EXP_GAIN: i32 = 100;
+
+// Smista comandi e in base al risultato aumenta exp utente
+async fn handle_command(msg: MessageCreate, state: CmdState) -> Failable<()> {
+    
+    // Divide comando in argomenti
+    let args = msg.content.split(' ').collect::<Vec<&str>>();
+    
+    // Smista e conserva risultato comando per aumentare exp se richiesto
+    let result = match args[0]
+    {
+        //       MISC
+        ".ping"  => commands::misc::ping(&msg, state.clone()).await?,
+        ".stats" => commands::misc::stats(&msg, state.clone()).await?,
+        ".exp"   => commands::misc::exp(&msg, state.clone()).await?,
+
+        _ => { CmdResult::Skip }
+    };
+    
+    // Se richiesto aumenta exp
+    if result == CmdResult::Success {
+        let mut redis = state.redis.lock().await;
+
+        // Aggiorna exp utente
+        let mut anima = redis.get_anima(msg.author.id.0)?;
+        utils::increase_exp(&mut redis, state.http, &mut anima, &msg, "", CMD_EXP_GAIN).await?;
+        redis.set_anima(msg.author.id.0, &anima)?;
+    }
+    
     Ok(())
 }

@@ -22,7 +22,6 @@ use twilight_gateway::{
 };
 
 use crate::{
-    formatting,
     HttpClient, 
     Redis
 };

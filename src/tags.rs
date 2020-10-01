@@ -61,6 +61,10 @@ pub enum Tag
     // per quando l'utente usa un altro bot
     UsedOtherBot,
 
+    // Per quando un utente sale o scende di livello
+    UserLevelUp,
+    UserLevelDown,
+
     // Indica che il gruppo va utilizzato su almeno questo 
     // livello di affinità, possono essercene più di uno per gruppo
     Affinity(Affinities),
@@ -79,6 +83,8 @@ impl Tag {
     pub fn string(&self) -> String {
         match self {
             Tag::UsedOtherBot  => format!("used_other_bot"),
+            Tag::UserLevelUp   => format!("user_level_up"),
+            Tag::UserLevelDown => format!("user_level_down"),
             Tag::Affinity(aff) => format!("affinity:{}", aff),
             Tag::Command(cmd)  => format!("cmd:{}", cmd),
             Tag::Anima(id)     => format!("anima:{}", id),
@@ -88,20 +94,24 @@ impl Tag {
     // Indica se la tag è ripetibile
     pub fn repetable(&self) -> bool {
         match self {
-            Tag::UsedOtherBot => false, 
-            Tag::Affinity(_)  => true,
-            Tag::Command(_)   => false,
-            Tag::Anima(_)     => true,
+            Tag::UsedOtherBot  => false, 
+            Tag::UserLevelUp   => false,
+            Tag::UserLevelDown => false,
+            Tag::Affinity(_)   => true,
+            Tag::Command(_)    => false,
+            Tag::Anima(_)      => true,
         }
     }
 
     // Indica se è opzionale
     pub fn optional(&self) -> bool {
         match self {
-            Tag::UsedOtherBot => false, 
-            Tag::Affinity(_)  => false,
-            Tag::Command(_)   => false,
-            Tag::Anima(_)     => true,
+            Tag::UsedOtherBot  => false, 
+            Tag::UserLevelUp   => false,
+            Tag::UserLevelDown => false,
+            Tag::Affinity(_)   => false,
+            Tag::Command(_)    => false,
+            Tag::Anima(_)      => true,
         }
     }
 }
