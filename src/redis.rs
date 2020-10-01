@@ -71,3 +71,12 @@ impl Redis {
         Ok(self.con.smembers(format!("{}/data", group))?)
     }
 }
+
+use serenity::prelude::*;
+use std::sync::Arc;
+
+// Permette l'inserimento nei dati di serenity
+pub struct RedisMapKey;
+impl TypeMapKey for RedisMapKey { 
+    type Value = Arc<Mutex<Redis>>;
+}

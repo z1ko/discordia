@@ -20,35 +20,30 @@ mod utils;
 #[macro_use] 
 extern crate prettytable;
 
-use twilight_model::id::ChannelId;
-use twilight_model::gateway::payload::MessageCreate;
-use std::str::FromStr;
-use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 use std::sync::Arc;
 use std::{env, error::Error};
-use std::io::{self, Write};
+use std::io::{Write};
 
-use tokio::stream::StreamExt;
-use tokio::sync::Mutex;
-
-use reqwest::Client as ReqwestClient;
-
-use twilight_gateway::{
-    cluster::{
-        Cluster, ShardScheme
-    }, 
-    Event
-};
-
-use twilight_model::gateway::Intents;
-use twilight_http::Client as HttpClient;
-use twilight_lavalink::{Lavalink};
-use twilight_cache_inmemory::{
-    EventType, InMemoryCache
+use serenity::{
+    async_trait,
+    model::{
+        event::ResumedEvent, 
+        gateway::Ready,
+        channel::Message,
+    },
+    framework::{
+        StandardFramework,
+        standard::macros::group,
+    },
+    http::Http,
+    prelude::*,
 };
 
 use crate::{
-    redis::Redis,
+    redis::{
+        RedisMapKey, 
+        Redis
+    },
     anima::{
         exp::{
             LevelChange,
@@ -56,14 +51,11 @@ use crate::{
         },
         Anima
     },
-    commands::{
-        state::CmdState,
-        CmdResult,
-    },
     response::generate_response,
     tags::{
         Tag, Filter, Commands
-    }
+    },
+    commands::{misc::*,}
 };
 
 // Per evitare di scrivere sto schifo
@@ -76,10 +68,6 @@ async fn main() -> Failable<()> {
     let redis_url = std::env::var("REDIS_URL")?;
     let token = std::env::var("DISCORD_TOKEN")?;   
     
-    let lavalink_psw = std::env::var("LAVALINK_PSW")?;
-    let lavalink_url = std::env::var("LAVALINK_URL")?;
-    let lavalink_socket = SocketAddr::from_str(&lavalink_url)?;
-
     println!("\n{}", LOGO);
     println!("\n================================= INITIALIZATION =================================\n");
 
@@ -90,143 +78,94 @@ async fn main() -> Failable<()> {
         .expect("Error connecting to Redis server")));
     println!("[OK]");
 
-    // Crea quante shard vuole discord
-    let scheme = ShardScheme::Auto;
-    let shard_count = 1;
-    
-    print!("[INFO] Creating shard cluster using token ... ");
+    // TODO: Carica info sullo stato corrente
+    let http = Http::new_with_token(&token);
+    let root = match http.get_current_application_info().await {
+        Ok(info) => info.owner.id,
+        Err(_)   => panic!("Owner not found"),
+    };
+    println!("[INFO] Current root user: {}", root);
+
+    // Crea framework di base
+    let framework = StandardFramework::new()
+        .configure(|ctx| ctx
+            .prefix(".")
+        )
+        .group(&MISC_GROUP);
+
+    print!("[INFO] Creating serenity client ... ");
     std::io::stdout().flush().unwrap();
 
-    let cluster = Cluster::builder(&token)
-        .shard_scheme(scheme)
-        .intents(Intents::GUILD_MESSAGES | Intents::GUILD_VOICE_STATES)
-        .build().await?;
-    println!("[OK]");
-    
-    // Crea client http per richieste all'API e ottiene l'id del bot
-    let http = HttpClient::new(&token);
-    let reqwest = ReqwestClient::new();
-    let user = http.current_user().await?;
-
-    print!("[INFO] Connecting to Lavalink at {} ... ", lavalink_socket); 
-    std::io::stdout().flush().unwrap();
-    
-    // Creazione collegamento a lavalink
-    let lavalink = Lavalink::new(user.id, shard_count);
-    lavalink.add(lavalink_socket, lavalink_psw)
-        .await.expect("Error connecting Lavalink");
+    // Crea client per serenity
+    let mut client = Client::new(&token)
+        .framework(framework).await?;
     println!("[OK]");
 
-    print!("[INFO] Starting shard cluster ... ");
-    std::io::stdout().flush().unwrap();
-    
-    // Fai partile le shard in background
-    let cluster_core = cluster.clone();
-    tokio::spawn(async move {
-        cluster_core.up().await;
-    });
-    println!("[OK]");
+    // Inserisce risorse globali
+    {
+        let mut data = client.data.write().await;
+        data.insert::<RedisMapKey>(redis.clone());
+    }
 
     println!("\n                                        Now things should just work... I hope :)");
     println!("==================================================================================");
 
-    // La cache per ora contiene solo i messaggi
-    let cache = InMemoryCache::builder()
-        .event_types(
-            EventType::MESSAGE_CREATE      | 
-            EventType::MESSAGE_DELETE      | 
-            EventType::MESSAGE_DELETE_BULK | 
-            EventType::MESSAGE_UPDATE      |
-            EventType::VOICE_SERVER_UPDATE |
-            EventType::VOICE_STATE_UPDATE,
-        )
-        .build();
-
-    // Ottiene messaggi dal sink del cluster
-    let cluster_core = cluster.clone(); 
-    let mut events = cluster_core.events();
-
-    // Gestisce eventi lavalink
-    let lavalink_core = lavalink.clone();
-
-    // Template dello stato usabile dei comandi
-    let state = CmdState { redis, cluster, lavalink, http, reqwest };
-    while let Some((shard_id, event)) = events.next().await 
-    {
-        cache.update(&event);
-        lavalink_core.process(&event).await?;
-
-        // Smista eventi
-        handle_event(shard_id, event, state.clone())?;
-    }
-
+    // Avvia serenity e lascia il controllo
+    client.start().await?;
     Ok(())
 }
 
-// Smista gli eventi e spawna i thread nel caso di comando
-fn handle_event(shard_id: u64, event: Event, state: CmdState) -> Failable<()> {
-    match event
-    {
-        // Nuovo messaggio
-        Event::MessageCreate(msg) => 
+// Controller principale del bot
+struct DiscordiaEventHandler;
+
+#[async_trait] 
+impl EventHandler for DiscordiaEventHandler
+{
+    /**
+     * Gestisce la coda della musica
+     */
+    async fn ready(&self, _: Context, ready: Ready) {
+        // TODO        
+    }
+
+    /**
+     * Gestisce eventi non legati ai comandi
+     */
+    async fn message(&self, ctx: Context, msg: Message) {
+
+        // NOTE Se abbiamo rispost ad un altro bot
+        if msg.content.starts_with("!") || msg.content.starts_with("-")
         {
-            // Se usa un altro bot
-            if msg.content.starts_with("!") || msg.content.starts_with("-") {
-                tokio::spawn(spawn_handle_other_bot_use((*msg).clone(), state.clone()));
-                return Ok(());
-            }
-
-            // Se è un comando lo smista
-            if msg.content.starts_with(".") {
-                tokio::spawn(spawn_handle_command((*msg).clone(), shard_id, state.clone()));
-            }
-        },
-
-        // Shard connessa o riconnessa al server
-        Event::ShardConnected(_) => 
-            println!("[INFO] Shard {} is connected", shard_id),
-
-        _ => { /* TODO */ }
-    }
-
-    Ok(())
-}
-
-
-async fn spawn_handle_other_bot_use(msg: MessageCreate, state: CmdState) {
-    if let Err(why) = handle_other_bot_use(msg, state).await {
-        eprintln!("[ERROR]: {}", why);
-    }
-}
-
-async fn spawn_handle_command(msg: MessageCreate, shard_id: u64, state: CmdState) {
-    if let Err(why) = handle_command(msg, shard_id, state).await {
-        eprintln!("[ERROR]: {}", why);
-    }
-}
-
-// Insulta l'utente e rimuove esperienza
-async fn handle_other_bot_use(msg: MessageCreate, state: CmdState) -> Failable<()> {
-    let mut redis = state.redis.lock().await;
+            let mut data = ctx.data.write().await;
+            let mutex = data.get_mut::<RedisMapKey>()
+                .unwrap().clone();
+            
+            let mut redis = mutex.lock().await;
     
-    let exp_damage: i32 = 50;
+            // Ottiene risposta per l'utente e se questa esiste
+            // la invia alla chat discrod
+            let filter = Filter::new().tag(Tag::UsedOtherBot);
+            let response = match response::generate_response(&mut redis, filter).unwrap() {
+                Some(response) => response,
+                None => {
+                    eprintln!("[WARN] No responses found for tag");
+                    String::default()
+                }
+            };
 
-    // Ottiene risposta per l'utente e se questa esiste
-    // la invia alla chat discrod
-    let filter = Filter::new().tag(Tag::UsedOtherBot);
-    let response = match response::generate_response(&mut redis, filter)? {
-        Some(response) => response,
-        None => String::default(),
-    };
+            // Ottiene anima e decrementa l'exp mostrando il risultato su Discord
+            let mut anima = redis.get_anima(msg.author.id.0).unwrap();
+            
+            // TODO
+            //utils::decrease_exp(&mut redis, state.http, &mut anima, &msg, &response, exp_damage).await;
 
-    // Ottiene anima e decrementa l'exp
-    let mut anima = redis.get_anima(msg.author.id.0).unwrap();
-    utils::decrease_exp(&mut redis, state.http, &mut anima, &msg, &response, exp_damage).await?;
-    redis.set_anima(msg.author.id.0, &anima).unwrap();
+            redis.set_anima(msg.author.id.0, &anima).unwrap();
+        }        
+    }
+}
 
-    Ok(())
-} 
 
+/*
 // Smista comandi e in base al risultato aumenta exp utente
 async fn handle_command(msg: MessageCreate, shard_id: u64, state: CmdState) -> Failable<()> {
     
@@ -262,3 +201,4 @@ async fn handle_command(msg: MessageCreate, shard_id: u64, state: CmdState) -> F
     println!("DIO");
     Ok(())
 }
+*/

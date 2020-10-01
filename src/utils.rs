@@ -3,7 +3,6 @@ use twilight_model::gateway::payload::MessageCreate;
 use crate::Filter;
 use crate::Failable;
 use crate::Anima;
-use crate::HttpClient;
 use crate::Redis;
 
 use crate::{
@@ -12,7 +11,7 @@ use crate::{
     anima::exp::*,
     embed,
 };
-
+/*
 /**
  * Insieme di patterns usati spesso
  */
@@ -74,3 +73,4 @@ pub async fn decrease_exp(redis: &mut Redis, http: HttpClient, anima: &mut Anima
 
     Ok(())
 }
+*/
