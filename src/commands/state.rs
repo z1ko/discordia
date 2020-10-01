@@ -6,6 +6,7 @@ use crate::Redis;
 use tokio::sync::Mutex;
 use std::sync::Arc;
 
+use twilight_lavalink::Lavalink;
 use twilight_gateway::cluster::Cluster;
 
 // Contiene tutte le strutture utili ad un comando
@@ -25,5 +26,5 @@ pub struct CmdState
     pub reqwest: ReqwestClient,
 
     // Interfaccia di Lavalink
-    // TODO
+    pub lavalink: Lavalink,
 }

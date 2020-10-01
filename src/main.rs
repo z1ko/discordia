@@ -146,12 +146,15 @@ async fn main() -> Failable<()> {
     let cluster_core = cluster.clone(); 
     let mut events = cluster_core.events();
 
+    // Gestisce eventi lavalink
+    let lavalink_core = lavalink.clone();
+
     // Template dello stato usabile dei comandi
-    let state = CmdState { redis, cluster, http, reqwest };
+    let state = CmdState { redis, cluster, lavalink, http, reqwest };
     while let Some((shard_id, event)) = events.next().await 
     {
         cache.update(&event);
-        lavalink.process(&event).await?;
+        lavalink_core.process(&event).await?;
 
         // Smista eventi
         handle_event(shard_id, event, state.clone())?;
