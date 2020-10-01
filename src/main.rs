@@ -11,11 +11,8 @@ static LOGO: &str = r#"
 
 mod redis;
 mod anima;
-mod response;
 mod commands;
 mod tags;
-mod embed;
-mod utils;
 
 #[macro_use] 
 extern crate prettytable;
@@ -33,10 +30,14 @@ use serenity::{
     },
     framework::{
         StandardFramework,
-        standard::macros::group,
+        standard::{
+            CommandResult,
+            macros::hook
+        },
     },
     http::Http,
     prelude::*,
+    voice,
 };
 
 use crate::{
@@ -51,11 +52,10 @@ use crate::{
         },
         Anima
     },
-    response::generate_response,
     tags::{
         Tag, Filter, Commands
     },
-    commands::{misc::*,}
+    commands::{misc::*, music::*}
 };
 
 // Per evitare di scrivere sto schifo
@@ -79,18 +79,19 @@ async fn main() -> Failable<()> {
     println!("[OK]");
 
     // TODO: Carica info sullo stato corrente
-    let http = Http::new_with_token(&token);
-    let root = match http.get_current_application_info().await {
-        Ok(info) => info.owner.id,
-        Err(_)   => panic!("Owner not found"),
-    };
-    println!("[INFO] Current root user: {}", root);
+    //let http = Http::new_with_token(&token);
+    //let root = match http.get_current_application_info().await {
+    //    Ok(info) => info.owner.id,
+    //    Err(_)   => panic!("Owner not found"),
+    //};
+    //println!("[INFO] Current root user: {}", root);
 
     // Crea framework di base
     let framework = StandardFramework::new()
         .configure(|ctx| ctx
             .prefix(".")
         )
+        .group(&MUSIC_GROUP)
         .group(&MISC_GROUP);
 
     print!("[INFO] Creating serenity client ... ");
@@ -104,6 +105,7 @@ async fn main() -> Failable<()> {
     // Inserisce risorse globali
     {
         let mut data = client.data.write().await;
+        data.insert::<VoiceMapKey>(client.voice_manager.clone());
         data.insert::<RedisMapKey>(redis.clone());
     }
 
@@ -114,6 +116,9 @@ async fn main() -> Failable<()> {
     client.start().await?;
     Ok(())
 }
+
+// Danno di exp per usare un altro bot
+const OTHER_BOT_DAMANGE_EXP: i32 = 100;
 
 // Controller principale del bot
 struct DiscordiaEventHandler;
@@ -142,28 +147,71 @@ impl EventHandler for DiscordiaEventHandler
             
             let mut redis = mutex.lock().await;
     
-            // Ottiene risposta per l'utente e se questa esiste
-            // la invia alla chat discrod
-            let filter = Filter::new().tag(Tag::UsedOtherBot);
-            let response = match response::generate_response(&mut redis, filter).unwrap() {
-                Some(response) => response,
-                None => {
-                    eprintln!("[WARN] No responses found for tag");
-                    String::default()
-                }
-            };
+            // Cerca risposta
+            match redis.generate_response(Filter::new().tag(Tag::UsedOtherBot)).unwrap() {
+                Some(response) => commands::embed_decrease_exp(&ctx, &msg, &response, OTHER_BOT_DAMANGE_EXP).await,
+                None => eprintln!("[WARN] No response found"),
+            }
 
             // Ottiene anima e decrementa l'exp mostrando il risultato su Discord
             let mut anima = redis.get_anima(msg.author.id.0).unwrap();
-            
-            // TODO
-            //utils::decrease_exp(&mut redis, state.http, &mut anima, &msg, &response, exp_damage).await;
+            if let LevelChange::Delta(old, new) = anima.decrease_exp(OTHER_BOT_DAMANGE_EXP) 
+            {
+                match redis.generate_response(Filter::new().tag(Tag::UserLevelDown)).unwrap() {
+                    Some(response) => commands::embed_level_down(&ctx, &msg, &response, old, new).await,
+                    None => eprintln!("[WARN] No response found"),
+                }
+            }
 
             redis.set_anima(msg.author.id.0, &anima).unwrap();
         }        
     }
 }
 
+//
+// Invocato dopo l'esecuzione di un comando
+//
+
+#[hook]
+async fn after(ctx: &Context, msg: &Message, command_name: &str, command_result: CommandResult) {
+    match command_result {
+        Err(why) => println!("Command '{}' returned error {:?}", command_name, why),
+        Ok(()) => 
+        {
+            let mut data = ctx.data.write().await;
+            let mutex = data.get_mut::<RedisMapKey>()
+                .unwrap().clone();
+                
+            // Ottiene aumento exp dei comandi
+            let exp = match command_name {
+                ".play" => 100,
+                _ => 0
+            };
+                
+            if exp != 0 {
+                let mut redis = mutex.lock().await;
+
+                // Cerca risposta
+                match redis.generate_response(Filter::new().tag(Tag::UserExpUp)).unwrap() {
+                    Some(response) => commands::embed_increase_exp(&ctx, &msg, &response, exp).await,
+                    None => eprintln!("[WARN] No response found"),
+                }
+
+                // Ottiene anima e decrementa l'exp mostrando il risultato su Discord
+                let mut anima = redis.get_anima(msg.author.id.0).unwrap();
+                if let LevelChange::Delta(old, new) = anima.increase_exp(exp) 
+                {
+                    match redis.generate_response(Filter::new().tag(Tag::UserLevelDown)).unwrap() {
+                        Some(response) => commands::embed_level_up(&ctx, &msg, &response, old, new).await,
+                        None => eprintln!("[WARN] No response found"),
+                    }
+                }
+
+                redis.set_anima(msg.author.id.0, &anima).unwrap();
+            }
+        }
+    }
+}
 
 /*
 // Smista comandi e in base al risultato aumenta exp utente

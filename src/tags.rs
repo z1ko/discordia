@@ -65,6 +65,10 @@ pub enum Tag
     UserLevelUp,
     UserLevelDown,
 
+    // Per quando un utente prende o perde exp
+    UserExpUp,
+    UserExpDown,
+
     // Indica che il gruppo va utilizzato su almeno questo 
     // livello di affinità, possono essercene più di uno per gruppo
     Affinity(Affinities),
@@ -82,9 +86,11 @@ impl Tag {
     // Converte la tag in stringa per poter cercare nel database
     pub fn string(&self) -> String {
         match self {
-            Tag::UsedOtherBot  => format!("used_other_bot"),
-            Tag::UserLevelUp   => format!("user_level_up"),
-            Tag::UserLevelDown => format!("user_level_down"),
+            Tag::UsedOtherBot  => format!("used-other-bot"),
+            Tag::UserLevelUp   => format!("user-level-up"),
+            Tag::UserLevelDown => format!("user-level-down"),
+            Tag::UserExpUp     => format!("user-exp-up"),
+            Tag::UserExpDown   => format!("user-exp-down"),
             Tag::Affinity(aff) => format!("affinity:{}", aff),
             Tag::Command(cmd)  => format!("cmd:{}", cmd),
             Tag::Anima(id)     => format!("anima:{}", id),
@@ -97,6 +103,8 @@ impl Tag {
             Tag::UsedOtherBot  => false, 
             Tag::UserLevelUp   => false,
             Tag::UserLevelDown => false,
+            Tag::UserExpUp     => false,
+            Tag::UserExpDown   => false,
             Tag::Affinity(_)   => true,
             Tag::Command(_)    => false,
             Tag::Anima(_)      => true,
@@ -109,6 +117,8 @@ impl Tag {
             Tag::UsedOtherBot  => false, 
             Tag::UserLevelUp   => false,
             Tag::UserLevelDown => false,
+            Tag::UserExpUp     => false,
+            Tag::UserExpDown   => false,
             Tag::Affinity(_)   => false,
             Tag::Command(_)    => false,
             Tag::Anima(_)      => true,

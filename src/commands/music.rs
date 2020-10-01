@@ -1,190 +1,152 @@
 
-use std::error::Error;
-use std::convert::TryInto;
-
-use reqwest::Client as ReqwestClient;
-
-use twilight_lavalink::http::LoadedTracks;
-use twilight_lavalink::model::Destroy;
-use twilight_lavalink::model::Play;
-use twilight_model::id::ChannelId;
-use twilight_model::gateway::{
-    payload::MessageCreate,
+use std::sync::Arc;
+use serenity::{
+    framework::standard::{
+        CommandResult, Args,
+        macros::{
+            command, 
+            group
+        },
+    },
+    voice::ytdl,
+    model::prelude::*,
+    prelude::*
 };
 
-use crate::{CmdState, CmdResult};
+// Import the client's bridge to the voice manager. Since voice is a standalone
+// feature, it's not as ergonomic to work with as it could be. The client
+// provides a clean bridged integration with voice.
+use serenity::client::bridge::voice::ClientVoiceManager;
 
-// Per evitare di scrivere sto schifo
-type Failable<T> = Result<T, Box<dyn Error + Send + Sync>>;
-
-// Si unisce al canale discordi e crea player
-pub async fn join(msg: &MessageCreate, shard_id: u64, state: CmdState) -> Failable<CmdResult> {
-    println!("[INFO] join cmd in channel {} by {}", msg.channel_id, msg.author.name);
-
-    let args: Vec<&str> = msg.content.split(' ').collect();
-    if args.len() == 2 {
-        if let Ok(channel_id) = args[1].parse::<u64>() {
-
-            // Crea nuovo player per il server
-            let guild_id = msg.guild_id.unwrap();
-            println!("[INFO] Creazione player di Lavalink per {}", guild_id);
-            state.lavalink.player(guild_id).await?; 
-
-            // Ottiene shard usata al momento
-            let shard = state.cluster.shard(shard_id)
-                .unwrap();
-
-            // Comando per unirsi al canale
-            println!("[INFO] Collegamento al canale {}", channel_id);
-            shard.command(&serde_json::json!({
-                "op": 4, "d": 
-                {
-                    "channel_id": channel_id,
-                    "guild_id": msg.guild_id,
-                    "self_mute": false,
-                    "self_deaf": true,
-                }
-            }))
-            .await?;
-            
-            state.http.create_message(msg.channel_id)
-                .content(format!("Collegata al canale <#{:?}>!", channel_id))?
-                .await?;
-
-            println!("[INFO] Comando ha avuto successo: 5 exp guadagnata");
-            return Ok(CmdResult::Success(5));
-        } 
-        else
-        {
-            println!("[INFO] Fallimento collegamento: Canale non valido");
-            state.http.create_message(msg.channel_id)
-                .content("Il canale specificato non è corretto")?
-                .await?;
-
-            return Ok(CmdResult::Failure);
-        }
-    }
-    else
-    {
-        println!("[INFO] Fallimento collegamento: Canale non specificato");
-        state.http.create_message(msg.channel_id)
-            .content("Non hai specificato il canale")?
-            .await?;
-
-        return Ok(CmdResult::Failure);
-    }
+pub struct VoiceMapKey;
+impl TypeMapKey for VoiceMapKey {
+    type Value = Arc<Mutex<ClientVoiceManager>>;
 }
 
-// Lascia il canale vocale
-pub async fn leave(msg: &MessageCreate, shard_id: u64, state: CmdState) -> Failable<CmdResult> {
-    println!("[INFO] leave cmd in channel {} by {}", msg.channel_id, msg.author.name);
+#[group]
+#[commands(join, leave, play)]
+pub struct Music;
 
-    let guild_id = msg.guild_id.unwrap();
-    if let Some(player) = state.lavalink.players().get(&guild_id) {
+//
+// Si unisce al canale vocale
+//
 
-        // Rimuove player di lavalink dal canale
-        println!("[INFO] Rimozione del Lavalink player dalla guild {}", guild_id);
-        player.send(Destroy::from(guild_id))?;
-    }
-    else
-    {
-        println!("[INFO] Lavalink player non presente nel canale specificato");
-        state.http.create_message(msg.channel_id)
-            .content("Non sto riproducendo musica in quel canale")?
-            .await?;
-    }
+#[command]
+async fn join(ctx: &Context, msg: &Message) -> CommandResult {
 
-    // Ottiene shard usata al momento
-    let shard = state.cluster.shard(shard_id)
-        .unwrap();
-
-    // Rimuove bot dal canale
-    println!("[INFO] Rimozione del bot dalla guild {}", guild_id);
-    shard.command(&serde_json::json!({
-        "op": 4, "d": 
-        {
-            "channel_id": None::<ChannelId>,
-            "guild_id": msg.guild_id,
-            "self_mute": false,
-            "self_deaf": true,
+    // Non possiamo collegarci ad un canale privato
+    let guild = match msg.guild(&ctx.cache).await {
+        Some(guild) => guild,
+        None => {
+            msg.channel_id.say(&ctx.http, "Non posso collegarmi qui").await?;
+            return Ok(());
         }
-    }))
-    .await?;
+    };
 
-    state.http.create_message(msg.channel_id)
-        .content("Ho lasciato il canale vocale!")?
-        .await?;
+    // Ottiene canale vocale a cui collegarsi
+    let channel = match guild.voice_states.get(&msg.author.id)
+        .and_then(|voice_state| voice_state.channel_id)
+    {
+        Some(channel) => channel,
+        None => {
+            msg.reply(ctx, "Ma non sei in un canale vocale").await?;
+            return Ok(());
+        }
+    };
 
-    println!("[INFO] Comando ha avuto successo");
-    Ok(CmdResult::Skip)
+    let mut data = ctx.data.write().await;
+    let mutex = data.get_mut::<VoiceMapKey>()
+        .unwrap().clone();
+
+    let mut manager = mutex.lock().await;
+    if let Some(_) = manager.join(guild.id, channel) {
+        msg.channel_id.say(&ctx.http, &format!("Collegata al canale {}", channel.mention())).await?;
+    }
+
+    Ok(())
 }
 
-// Riproduce una musica nel canale vocale
-pub async fn play(msg: &MessageCreate, state: CmdState) -> Failable<CmdResult> {
-    println!("[INFO] play cmd in channel {} by {}", msg.channel_id, msg.author.name);
+//
+// Esce dal canale
+//
 
-    let args: Vec<&str> = msg.content.split(' ').collect();
-    if args.len() == 2 
+#[command]
+async fn leave(ctx: &Context, msg: &Message) -> CommandResult {
+
+    // Non ha senso se è un canale privato
+    let guild_id = match ctx.cache.guild_channel_field(msg.channel_id, |channel| channel.guild_id).await {
+        Some(id) => id,
+        None => {
+            msg.channel_id.say(&ctx.http, "Non posso collegarmi qui").await?;
+            return Ok(());
+        },
+    };
+
+    let mut data = ctx.data.write().await;
+    let mutex = data.get_mut::<VoiceMapKey>()
+        .unwrap().clone();
+
+    let mut manager = mutex.lock().await;
+    if let Some(_) = manager.get(guild_id) 
     {
-        let search = args[1];
-        println!("[INFO] Ricerca di \"{}\"", search);
-
-        let guild_id = msg.guild_id.unwrap();
-        if let Some(player) = state.lavalink.players().get(&guild_id) {
-            println!("[INFO] Lavalink player found for guild {}", guild_id);
-
-            // Ricerca il link nel web tramite lavalink
-            let config = player.node().config();
-            let request = twilight_lavalink::http::load_track(config.address, &search, &config.authorization)?
-                .try_into()?;
-                
-            // Invia richiesta HTTP a lavalink
-            // TODO Conserva client nello stato dell'app
-            let client = ReqwestClient::new();
-            let result = client.execute(request).await?;
-            let result = result.json::<LoadedTracks>().await?;
-
-            // Riproduce la canzone se abbiamo trovato qualcosa
-            if let Some(track) = result.tracks.first() 
-            {
-                println!("[INFO] \"{:?}\" ottenuto pronto alla riproduzione", track.info.title);
-                player.send(Play::from((guild_id, &track.track)))?;
-
-                let content = format!("Riproducendo **{:?}** di **{:?}**", track.info.title, track.info.author);
-                state.http.create_message(msg.channel_id)
-                    .content(content)?
-                    .await?;
-
-                // Successo
-                return Ok(CmdResult::Success(100));
-            }
-            else
-            {
-                println!("[INFO] Ricerca fallita: nessun risultato");
-                state.http.create_message(msg.channel_id)
-                    .content("Non ho trovato risultati...")?
-                    .await?;
-            }
-        }
-        else
-        {
-            println!("[INFO] Ricerca fallita: nessun player per questa gilda");
-            state.http.create_message(msg.channel_id)
-                    .content("Non sono in un canale vocale...")?
-                    .await?;
-
-            return Ok(CmdResult::Failure);
-        }
-    }
-    else
-    {
-        println!("[INFO] Riproduzione fallita: nessun argomento al comando");
-        state.http.create_message(msg.channel_id)
-            .content("Non hai specificato cosa riprodurre")?
-            .await?;
-
-        return Ok(CmdResult::Failure);
+        manager.remove(guild_id);
+        msg.channel_id.say(&ctx.http, "Ho lasciato il canale").await?;
+        return Ok(());
     }
 
-    Ok(CmdResult::Skip)
+    msg.channel_id.say(&ctx.http, "Ma non sono in un canale vocale...").await?;
+    Ok(())
+}
+
+//
+// Riproduci musica sul canale vocale
+//
+
+#[command]
+async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+
+    // URL della canzone
+    let url = match args.single::<String>() {
+        Ok(url) => url,
+        Err(_) => {
+            msg.channel_id.say(&ctx.http, "Devi dirmi l'URL del video").await?;
+            return Ok(());
+        },
+    };
+
+    if !url.starts_with("http") {
+        msg.channel_id.say(&ctx.http, "Serve un URL valido").await?;
+        return Ok(());
+    }
+
+    // Ottiene gilda attiva
+    let guild_id = match ctx.cache.guild_channel(msg.channel_id).await {
+        Some(channel) => channel.guild_id,
+        None => {
+            msg.channel_id.say(&ctx.http, "Non trovo il canale").await?;
+            return Ok(());
+        },
+    };
+
+    let mut data = ctx.data.write().await;
+    let mutex = data.get_mut::<VoiceMapKey>()
+        .unwrap().clone();
+
+    let mut manager = mutex.lock().await;
+    if let Some(player) = manager.get_mut(guild_id) {
+        let source = match ytdl(&url).await {
+            Ok(source) => source,
+            Err(why) => {
+                msg.channel_id.say(&ctx.http, format!("Errore ottenimento risorsa; {}", why)).await?;
+                return Ok(());
+            },
+        };
+
+        player.play(source);
+        msg.channel_id.say(&ctx.http, "Riproduco {}").await?;
+        return Ok(());
+    }
+
+    msg.channel_id.say(&ctx.http, "Ma non sono in un canale vocale...").await?;
+    Ok(())
 }

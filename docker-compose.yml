@@ -1,7 +1,6 @@
 version: '3.0'
 
 services:
-    
     database:
         container_name: database
         image: redis
@@ -10,14 +9,3 @@ services:
             - "./redis:/data"
         ports:
             - "6379:6379"
-
-    lavalink:
-        container_name: lavalink
-        image: fredboat/lavalink:master
-        network_mode: host
-        volumes:
-            - "./lavalink/application.yml:/opt/Lavalink/application.yml"        
-        ports:
-            - "2333:2333"
-            - "80:80"
-            - "8080:8080"
