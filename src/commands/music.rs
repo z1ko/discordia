@@ -78,7 +78,7 @@ pub async fn leave(msg: &MessageCreate, shard: Shard, lavalink: Lavalink, http: 
     println!("[INFO] leave cmd in channel {} by {}", msg.channel_id, msg.author.name);
 
     let guild_id = msg.guild_id.unwrap();
-    if let Ok(player) = lavalink.player(guild_id).await {
+    if let Some(player) = lavalink.players().get(&guild_id) {
 
         // Rimuove player di lavalink dal canale
         println!("[INFO] Rimozione del Lavalink player dalla guild {}", guild_id);
@@ -123,7 +123,7 @@ pub async fn play(msg: &MessageCreate, lavalink: Lavalink, http: HttpClient) -> 
         println!("[INFO] Ricerca di \"{}\"", search);
 
         let guild_id = msg.guild_id.unwrap();
-        if let Ok(player) = lavalink.player(guild_id).await {
+        if let Some(player) = lavalink.players().get(&guild_id) {
             println!("[INFO] Lavalink player found for guild {}", guild_id);
 
             // Ricerca il link nel web tramite lavalink
@@ -155,6 +155,13 @@ pub async fn play(msg: &MessageCreate, lavalink: Lavalink, http: HttpClient) -> 
                     .content("Non ho trovato risultati...")?
                     .await?;
             }
+        }
+        else
+        {
+            println!("[INFO] Ricerca fallita: nessun player per questa gilda");
+                http.create_message(msg.channel_id)
+                    .content("Non sono in un canale vocale...")?
+                    .await?;
         }
     }
     else
