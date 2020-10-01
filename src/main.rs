@@ -99,7 +99,7 @@ async fn main() -> Failable<()> {
 
     let cluster = Cluster::builder(&token)
         .shard_scheme(scheme)
-        .intents(Intents::GUILD_MESSAGES)
+        .intents(Intents::GUILD_MESSAGES | Intents::GUILD_VOICE_STATES)
         .build().await?;
     println!("[OK]");
     
@@ -136,7 +136,9 @@ async fn main() -> Failable<()> {
             EventType::MESSAGE_CREATE      | 
             EventType::MESSAGE_DELETE      | 
             EventType::MESSAGE_DELETE_BULK | 
-            EventType::MESSAGE_UPDATE,
+            EventType::MESSAGE_UPDATE      |
+            EventType::VOICE_SERVER_UPDATE |
+            EventType::VOICE_STATE_UPDATE,
         )
         .build();
 

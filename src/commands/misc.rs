@@ -1,13 +1,5 @@
 
-
-use std::sync::Arc;
 use std::error::Error;
-use tokio::sync::Mutex;
-
-use prettytable::{Table, Row, Cell, format};
-
-use twilight_model::channel::embed::Embed;
-use twilight_model::user::User;
 use twilight_model::gateway::{
     payload::MessageCreate,
 };
@@ -17,10 +9,7 @@ use crate::{
     embed,
     CmdState,
     anima::Anima,
-    commands::CmdResult,
-    anima::exp::Levelling,
-    anima::exp::LevelChange,
-    HttpClient, Redis
+    commands::CmdResult
 };
 
 // Per evitare di scrivere sto schifo
