@@ -258,6 +258,7 @@ async fn handle_command(msg: MessageCreate, shard_id: u64, state: CmdState) -> F
         utils::increase_exp(&mut redis, state.http, &mut anima, &msg, "", exp).await?;
         redis.set_anima(msg.author.id.0, &anima)?;
     }
-    
+   
+    println!("DIO");
     Ok(())
 }

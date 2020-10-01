@@ -13,7 +13,7 @@ services:
 
     lavalink:
         container_name: lavalink
-        image: fredboat/lavalink:dev
+        image: fredboat/lavalink:master
         network_mode: host
         volumes:
             - "./lavalink/application.yml:/opt/Lavalink/application.yml"        
