@@ -178,7 +178,7 @@ fn handle_event(shard_id: u64, event: Event, state: CmdState) -> Failable<()> {
 
             // Se è un comando lo smista
             if msg.content.starts_with(".") {
-                tokio::spawn(handle_command((*msg).clone(), state.clone()));
+                tokio::spawn(handle_command((*msg).clone(), shard_id, state.clone()));
             }
         },
 
@@ -218,7 +218,7 @@ async fn handle_other_bot_use(msg: MessageCreate, state: CmdState) -> Failable<(
 const CMD_EXP_GAIN: i32 = 100;
 
 // Smista comandi e in base al risultato aumenta exp utente
-async fn handle_command(msg: MessageCreate, state: CmdState) -> Failable<()> {
+async fn handle_command(msg: MessageCreate, shard_id: u64, state: CmdState) -> Failable<()> {
     
     // Divide comando in argomenti
     let args = msg.content.split(' ').collect::<Vec<&str>>();
@@ -231,16 +231,21 @@ async fn handle_command(msg: MessageCreate, state: CmdState) -> Failable<()> {
         ".stats" => commands::misc::stats(&msg, state.clone()).await?,
         ".exp"   => commands::misc::exp(&msg, state.clone()).await?,
 
+        //       MUSIC
+        ".join"  => commands::music::join(&msg, shard_id, state.clone()).await?,
+        ".leave" => commands::music::leave(&msg, shard_id, state.clone()).await?,
+        ".play"  => commands::music::play(&msg, state.clone()).await?,
+
         _ => { CmdResult::Skip }
     };
     
     // Se richiesto aumenta exp
-    if result == CmdResult::Success {
+    if let CmdResult::Success(exp) = result {
         let mut redis = state.redis.lock().await;
 
         // Aggiorna exp utente
         let mut anima = redis.get_anima(msg.author.id.0)?;
-        utils::increase_exp(&mut redis, state.http, &mut anima, &msg, "", CMD_EXP_GAIN).await?;
+        utils::increase_exp(&mut redis, state.http, &mut anima, &msg, "", exp).await?;
         redis.set_anima(msg.author.id.0, &anima)?;
     }
     

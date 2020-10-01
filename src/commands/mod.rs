@@ -7,7 +7,7 @@ pub mod state;
 #[derive(PartialEq)]
 pub enum CmdResult
 {
-    Success,
-    Skip,       // Non aumenta l'exp dell'utente
+    Success(i32),   // Aggiunge exo specificata
+    Skip,           // Non aumenta l'exp dell'utente
     Failure,
 }

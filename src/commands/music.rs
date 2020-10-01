@@ -12,15 +12,13 @@ use twilight_model::gateway::{
     payload::MessageCreate,
 };
 
-use crate::{
-    CmdState,
-};
+use crate::{CmdState, CmdResult};
 
 // Per evitare di scrivere sto schifo
 type Failable<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
 // Si unisce al canale discord
-pub async fn join(msg: &MessageCreate, shard_id: u64, state: CmdState) -> Failable<()> {
+pub async fn join(msg: &MessageCreate, shard_id: u64, state: CmdState) -> Failable<CmdResult> {
     println!("[INFO] join cmd in channel {} by {}", msg.channel_id, msg.author.name);
 
     let args: Vec<&str> = msg.content.split(' ').collect();
@@ -64,11 +62,11 @@ pub async fn join(msg: &MessageCreate, shard_id: u64, state: CmdState) -> Failab
             .await?;
     }
 
-    Ok(())
+    Ok(CmdResult::Skip)
 }
 
 // Lascia il canale vocale
-pub async fn leave(msg: &MessageCreate, shard_id: u64, state: CmdState) -> Failable<()> {
+pub async fn leave(msg: &MessageCreate, shard_id: u64, state: CmdState) -> Failable<CmdResult> {
     println!("[INFO] leave cmd in channel {} by {}", msg.channel_id, msg.author.name);
 
     let guild_id = msg.guild_id.unwrap();
@@ -107,11 +105,11 @@ pub async fn leave(msg: &MessageCreate, shard_id: u64, state: CmdState) -> Faila
             .await?;
     }
 
-    Ok(())
+    Ok(CmdResult::Skip)
 }
 
 // Riproduce una musica nel canale vocale
-pub async fn play(msg: &MessageCreate, state: CmdState) -> Failable<()> {
+pub async fn play(msg: &MessageCreate, state: CmdState) -> Failable<CmdResult> {
     println!("[INFO] play cmd in channel {} by {}", msg.channel_id, msg.author.name);
 
     let args: Vec<&str> = msg.content.split(' ').collect();
@@ -170,5 +168,5 @@ pub async fn play(msg: &MessageCreate, state: CmdState) -> Failable<()> {
             .await?;
     }
 
-    Ok(())
+    Ok(CmdResult::Success(100))
 }
