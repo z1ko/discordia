@@ -16,3 +16,6 @@ Cargo.lock
 
 # Non ci serve la cartella lavalink per ora
 /lavalink 
+
+# Non ci serve la cartella di redis
+/redis

@@ -7,7 +7,7 @@ services:
         image: redis
         command: redis-server --appendonly yes
         volumes: 
-            - "C:/Redis/Discord:/data"
+            - "./redis:/data"
         ports:
             - "6379:6379"
 
