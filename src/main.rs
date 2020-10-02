@@ -13,6 +13,7 @@ mod redis;
 mod anima;
 mod commands;
 mod tags;
+mod music;
 
 #[macro_use] 
 extern crate prettytable;
@@ -20,6 +21,9 @@ extern crate prettytable;
 use std::sync::Arc;
 use std::{env, error::Error};
 use std::io::{Write};
+
+use tokio::time;
+use rand::prelude::*;
 
 use serenity::{
     async_trait,
@@ -55,7 +59,8 @@ use crate::{
     tags::{
         Tag, Filter, Commands
     },
-    commands::{misc::*, music::*}
+    commands::{misc::*, music::*},
+    music::{Orchestra, OrchestraMapKey},
 };
 
 // Per evitare di scrivere sto schifo
@@ -99,14 +104,19 @@ async fn main() -> Failable<()> {
 
     // Crea client per serenity
     let mut client = Client::new(&token)
-        .framework(framework).await?;
+        .event_handler(DiscordiaEventHandler)
+        .framework(framework)
+        .await?;
     println!("[OK]");
 
     // Inserisce risorse globali
     {
         let mut data = client.data.write().await;
-        data.insert::<VoiceMapKey>(client.voice_manager.clone());
         data.insert::<RedisMapKey>(redis.clone());
+        data.insert::<VoiceMapKey>(client.voice_manager.clone());
+
+        let orchestra = Orchestra::new();
+        data.insert::<OrchestraMapKey>(orchestra);
     }
 
     println!("\n                                        Now things should just work... I hope :)");
@@ -129,8 +139,17 @@ impl EventHandler for DiscordiaEventHandler
     /**
      * Gestisce la coda della musica
      */
-    async fn ready(&self, _: Context, ready: Ready) {
-        // TODO        
+    async fn ready(&self, ctx: Context, ready: Ready) {
+      
+        let mut interval = time::interval(time::Duration::from_secs(1));
+        loop {
+            let mut data = ctx.data.write().await;
+            let mut orchesta = data.get_mut::<OrchestraMapKey>().unwrap();
+            orchesta.update().await;
+
+            // Dorme per 1 secondi
+            interval.tick().await;
+        }
     }
 
     /**
@@ -166,6 +185,73 @@ impl EventHandler for DiscordiaEventHandler
             redis.set_anima(msg.author.id.0, &anima).unwrap();
         }        
     }
+}
+
+//
+// Invocato prima dell'esecuzione di un programma
+//
+
+#[hook]
+async fn before(ctx: &Context, msg: &Message, cmd: &str) -> bool {
+    println!("[INFO] Command {} from {}", cmd, msg.author.name);
+
+    let mut data = ctx.data.write().await;
+    let mutex = data.get_mut::<RedisMapKey>().unwrap();
+
+    let mut redis = mutex.lock().await;
+    let anima = redis.get_anima(msg.author.id.0).unwrap();
+
+    // Calcola probabilità di non eseguire il comando
+    let n = anima.level as f32;
+    let prob = -(2.0_f32).powf(-(0.7_f32) * n) + 1.0_f32;
+    
+    // Non esegue il comando
+    if rand::thread_rng().gen::<f32>() > prob 
+    {
+        let filter = Filter::new()
+            .tag(Tag::Command(cmd.to_string()))
+            .tag(Tag::NoExec)
+            .tag(Tag::Anima(msg.author.id.0));
+        
+        match redis.generate_response(filter).unwrap() {
+            None => eprintln!("[WARN] No response found"),
+            Some(response) => 
+            {
+                // TODO
+                msg.channel_id.send_message(&ctx.http, |m| {
+                    m.embed(|e| {
+                        e.description(response);
+                        e
+                    })
+                })
+                .await.unwrap();
+            },
+        }
+
+        return false;
+    }
+
+    // Esegue il comando
+    let filter = Filter::new()
+        .tag(Tag::Command(cmd.to_string()))
+        .tag(Tag::Anima(msg.author.id.0));
+
+    match redis.generate_response(filter).unwrap() {
+        None => eprintln!("[WARN] No response found"),
+        Some(response) => 
+        {
+            // TODO
+            msg.channel_id.send_message(&ctx.http, |m| {
+                m.embed(|e| {
+                    e.description(response);
+                    e
+                })
+            })
+            .await.unwrap();
+        },
+    }
+
+    true
 }
 
 //
@@ -212,41 +298,3 @@ async fn after(ctx: &Context, msg: &Message, command_name: &str, command_result:
         }
     }
 }
-
-/*
-// Smista comandi e in base al risultato aumenta exp utente
-async fn handle_command(msg: MessageCreate, shard_id: u64, state: CmdState) -> Failable<()> {
-    
-    // Divide comando in argomenti
-    let args = msg.content.split(' ').collect::<Vec<&str>>();
-    
-    // Smista e conserva risultato comando per aumentare exp se richiesto
-    let result = match args[0]
-    {
-        //       MISC
-        ".ping"  => commands::misc::ping(&msg, state.clone()).await?,
-        ".stats" => commands::misc::stats(&msg, state.clone()).await?,
-        ".exp"   => commands::misc::exp(&msg, state.clone()).await?,
-
-        //       MUSIC
-        ".join"  => commands::music::join(&msg, shard_id, state.clone()).await?,
-        ".leave" => commands::music::leave(&msg, shard_id, state.clone()).await?,
-        ".play"  => commands::music::play(&msg, state.clone()).await?,
-
-        _ => { CmdResult::Skip }
-    };
-    
-    // Se richiesto aumenta exp
-    if let CmdResult::Success(exp) = result {
-        let mut redis = state.redis.lock().await;
-
-        // Aggiorna exp utente
-        let mut anima = redis.get_anima(msg.author.id.0)?;
-        utils::increase_exp(&mut redis, state.http, &mut anima, &msg, "", exp).await?;
-        redis.set_anima(msg.author.id.0, &anima)?;
-    }
-   
-    println!("DIO");
-    Ok(())
-}
-*/

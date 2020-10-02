@@ -69,17 +69,20 @@ pub enum Tag
     UserExpUp,
     UserExpDown,
 
+    // Per quando il comando non viene eseguito
+    NoExec,
+
     // Indica che il gruppo va utilizzato su almeno questo 
     // livello di affinità, possono essercene più di uno per gruppo
     Affinity(Affinities),
 
     // Indica che il gruppo va utilizzato su questo comando
     // può essercene uno solo per gruppo
-    Command(Commands),
+    Command(String),
 
     // Indica che il gruppo va utilizzato per uno specifico utente
     // ma se non è presente non fallisce
-    Anima(u32),
+    Anima(u64),
 }
 
 impl Tag {
@@ -94,6 +97,7 @@ impl Tag {
             Tag::Affinity(aff) => format!("affinity:{}", aff),
             Tag::Command(cmd)  => format!("cmd:{}", cmd),
             Tag::Anima(id)     => format!("anima:{}", id),
+            Tag::NoExec        => format!("no-exec"),
         }
     }
 
@@ -108,6 +112,7 @@ impl Tag {
             Tag::Affinity(_)   => true,
             Tag::Command(_)    => false,
             Tag::Anima(_)      => true,
+            Tag::NoExec        => false, 
         }
     }
 
@@ -122,6 +127,7 @@ impl Tag {
             Tag::Affinity(_)   => false,
             Tag::Command(_)    => false,
             Tag::Anima(_)      => true,
+            Tag::NoExec        => false,
         }
     }
 }

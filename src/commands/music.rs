@@ -8,7 +8,11 @@ use serenity::{
             group
         },
     },
-    voice::ytdl,
+    voice::{
+        LockedAudio, 
+        ytdl_search,
+        ytdl
+    },
     model::prelude::*,
     prelude::*
 };
@@ -18,13 +22,20 @@ use serenity::{
 // provides a clean bridged integration with voice.
 use serenity::client::bridge::voice::ClientVoiceManager;
 
+use crate::{
+    music::{
+        Orchestra, 
+        OrchestraMapKey
+    }
+};
+
 pub struct VoiceMapKey;
 impl TypeMapKey for VoiceMapKey {
     type Value = Arc<Mutex<ClientVoiceManager>>;
 }
 
 #[group]
-#[commands(join, leave, play)]
+#[commands(join, leave, play, stop, skip)]
 pub struct Music;
 
 //
@@ -73,7 +84,7 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
 #[command]
 async fn leave(ctx: &Context, msg: &Message) -> CommandResult {
 
-    // Non ha senso se è un canale privato
+    // Non ha senso se è un canale privato, ottiene id della gilda
     let guild_id = match ctx.cache.guild_channel_field(msg.channel_id, |channel| channel.guild_id).await {
         Some(id) => id,
         None => {
@@ -87,9 +98,13 @@ async fn leave(ctx: &Context, msg: &Message) -> CommandResult {
         .unwrap().clone();
 
     let mut manager = mutex.lock().await;
-    if let Some(_) = manager.get(guild_id) 
-    {
+    if let Some(_) = manager.get(guild_id) {
         manager.remove(guild_id);
+
+        // Resetta coda
+        let mut orchestra = data.get_mut::<OrchestraMapKey>().unwrap();
+        orchestra.reset().await;
+
         msg.channel_id.say(&ctx.http, "Ho lasciato il canale").await?;
         return Ok(());
     }
@@ -114,11 +129,6 @@ async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         },
     };
 
-    if !url.starts_with("http") {
-        msg.channel_id.say(&ctx.http, "Serve un URL valido").await?;
-        return Ok(());
-    }
-
     // Ottiene gilda attiva
     let guild_id = match ctx.cache.guild_channel(msg.channel_id).await {
         Some(channel) => channel.guild_id,
@@ -134,19 +144,108 @@ async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 
     let mut manager = mutex.lock().await;
     if let Some(player) = manager.get_mut(guild_id) {
-        let source = match ytdl(&url).await {
-            Ok(source) => source,
-            Err(why) => {
-                msg.channel_id.say(&ctx.http, format!("Errore ottenimento risorsa; {}", why)).await?;
-                return Ok(());
-            },
+        
+        // Carica link o cerca su youtube
+        let source = if url.starts_with("http") {
+            match ytdl(&url).await {
+                Ok(source) => source,
+                Err(why) => {
+                    msg.channel_id.say(&ctx.http, format!("Errore ottenimento risorsa; {}", why)).await?;
+                    return Ok(());
+                }
+            }
+        }
+        else {
+            match ytdl_search(args.rest()).await {
+                Ok(source) => source,
+                Err(why) => {
+                    msg.channel_id.say(&ctx.http, format!("Errore ottenimento risorsa; {}", why)).await?;
+                    return Ok(());
+                }
+            }
         };
 
-        player.play(source);
-        msg.channel_id.say(&ctx.http, "Riproduco {}").await?;
+        // Avvia la riproduzione ma pausa immediatamente, ci penserà l'orchestra
+        // a far partire l'audio quando necessario
+        let mut orchestra = data.get_mut::<OrchestraMapKey>().unwrap();
+        let audio: LockedAudio = player.play_returning(source);
+        orchestra.add(audio).await;
+
         return Ok(());
     }
 
     msg.channel_id.say(&ctx.http, "Ma non sono in un canale vocale...").await?;
     Ok(())
 }
+
+//
+// Ferma la musica
+//
+
+#[command]
+async fn stop(ctx: &Context, msg: &Message) -> CommandResult {
+    
+    // Non ha senso se è un canale privato, ottiene id della gilda
+    let guild_id = match ctx.cache.guild_channel_field(msg.channel_id, |channel| channel.guild_id).await {
+        Some(id) => id,
+        None => {
+            msg.channel_id.say(&ctx.http, "Non posso farlo qui").await?;
+            return Ok(());
+        },
+    };
+
+    let mut data = ctx.data.write().await;
+    let mutex = data.get_mut::<VoiceMapKey>()
+        .unwrap().clone();
+
+    let mut manager = mutex.lock().await;
+    if let Some(player) = manager.get_mut(guild_id) {
+        player.stop();
+
+        // Resetta coda
+        let mut orchestra = data.get_mut::<OrchestraMapKey>().unwrap();
+        orchestra.reset().await;
+
+        msg.channel_id.say(&ctx.http, "Smetto di riprodurre la musica...").await?;
+        return Ok(());
+    }
+    
+    msg.channel_id.say(&ctx.http, "Ma non sto riproducendo nulla...").await?;
+    Ok(())
+}
+
+//
+// Salta alla prossima canzone
+//
+
+#[command]
+async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
+    
+    // Non ha senso se è un canale privato, ottiene id della gilda
+    let guild_id = match ctx.cache.guild_channel_field(msg.channel_id, |channel| channel.guild_id).await {
+        Some(id) => id,
+        None => {
+            msg.channel_id.say(&ctx.http, "Non posso farlo qui").await?;
+            return Ok(());
+        },
+    };
+
+    let mut data = ctx.data.write().await;
+    let mutex = data.get_mut::<VoiceMapKey>()
+        .unwrap().clone();
+
+    let mut manager = mutex.lock().await;
+    if let Some(player) = manager.get_mut(guild_id) {
+
+        // Salta il brano
+        let mut orchestra = data.get_mut::<OrchestraMapKey>().unwrap();
+        orchestra.skip().await;
+
+        msg.channel_id.say(&ctx.http, "Passo al prossimo brano...").await?;
+        return Ok(());
+    }
+    
+    msg.channel_id.say(&ctx.http, "Ma non sto riproducendo nulla...").await?;
+    Ok(())
+}
+
