@@ -102,7 +102,7 @@ impl Redis {
     // Ricerca il database per ottenere una risposta adeguata al filtro
     pub fn generate_response(&mut self, filter: Filter) -> RedisResult<Option<String>> {
         
-        let mut winners: Vec<(String, i32)> = Vec::default();
+        let mut winners: Vec<(String, u32)> = Vec::default();
         let mut winner_score = 1;
         
         // Ottiene le tag di tutti i gruppi e salva quelli che hanno successo
@@ -118,6 +118,7 @@ impl Redis {
             }
         }
 
+        println!("[INFO] Filtro utilizzato: {}", filter);
         println!("[INFO] Trovati {} gruppi di risposte soddisfacenti:", winners.len());
 
         // Ottiene i gruppi che hanno lo score più alto

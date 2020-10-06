@@ -1,4 +1,6 @@
 
+use std::fmt;
+
 use crate::affinity::Affinity;
 use crate::commands::Commands;
 
@@ -99,8 +101,14 @@ pub struct Filter
 #[derive(Debug, PartialEq)]
 pub enum FilterResult 
 {
-    Passed(i32),  // Le tag sono valide per questo filtro
+    Passed(u32),  // Le tag sono valide per questo filtro
     Blocked       // Le tag non sono compatibili  
+}
+
+impl fmt::Display for Filter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        write!(f, "{:?}", self.tags)
+    }
 }
 
 impl Filter {
@@ -119,7 +127,7 @@ impl Filter {
     // Analizza un'insieme di stringhe tag
     pub fn check(&self, strings: &[String]) -> FilterResult 
     {
-        let mut score: i32 = 0;
+        let mut score: u32 = 0;
         for tag in &self.tags 
         {
             let contains = strings.contains(&tag.string());
@@ -131,11 +139,12 @@ impl Filter {
             // Se è opzionale e non presente allora non aumenta lo score
             if optional && !contains { 
                 println!("Optional value not found: {}", tag.string());
+                score = score.saturating_sub(1);
                 continue;
             }
 
             // Tutti gli altri casi aumenta il punteggio
-            score += 1;
+            score += 2;
         }
 
         FilterResult::Passed(score)
