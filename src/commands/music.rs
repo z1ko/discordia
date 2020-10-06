@@ -1,4 +1,5 @@
 
+use tracing::{info, warn};
 use std::sync::Arc;
 use serenity::{
     framework::standard::{
@@ -44,6 +45,7 @@ pub struct Music;
 
 #[command]
 async fn join(ctx: &Context, msg: &Message) -> CommandResult {
+    info!("Executing \"join\" command");
 
     // Non possiamo collegarci ad un canale privato
     let guild = match msg.guild(&ctx.cache).await {
@@ -83,6 +85,7 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
 
 #[command]
 async fn leave(ctx: &Context, msg: &Message) -> CommandResult {
+    info!("Executing \"leave\" command");
 
     // Non ha senso se è un canale privato, ottiene id della gilda
     let guild_id = match ctx.cache.guild_channel_field(msg.channel_id, |channel| channel.guild_id).await {
@@ -119,6 +122,7 @@ async fn leave(ctx: &Context, msg: &Message) -> CommandResult {
 
 #[command]
 async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    info!("Executing \"play\" command");
 
     // URL della canzone
     let url = match args.single::<String>() {
@@ -150,7 +154,7 @@ async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
             match ytdl(&url).await {
                 Ok(source) => source,
                 Err(why) => {
-                    msg.channel_id.say(&ctx.http, format!("Errore ottenimento risorsa; {}", why)).await?;
+                    msg.channel_id.say(&ctx.http, format!("Errore ottenimento risorsa: {}", why)).await?;
                     return Ok(());
                 }
             }
@@ -159,7 +163,7 @@ async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
             match ytdl_search(args.rest()).await {
                 Ok(source) => source,
                 Err(why) => {
-                    msg.channel_id.say(&ctx.http, format!("Errore ottenimento risorsa; {}", why)).await?;
+                    msg.channel_id.say(&ctx.http, format!("Errore ottenimento risorsa: {}", why)).await?;
                     return Ok(());
                 }
             }
@@ -184,6 +188,7 @@ async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 
 #[command]
 async fn stop(ctx: &Context, msg: &Message) -> CommandResult {
+    info!("Executing \"stop\" command");
     
     // Non ha senso se è un canale privato, ottiene id della gilda
     let guild_id = match ctx.cache.guild_channel_field(msg.channel_id, |channel| channel.guild_id).await {
@@ -220,6 +225,7 @@ async fn stop(ctx: &Context, msg: &Message) -> CommandResult {
 
 #[command]
 async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
+    info!("Executing \"skip\" command");
     
     // Non ha senso se è un canale privato, ottiene id della gilda
     let guild_id = match ctx.cache.guild_channel_field(msg.channel_id, |channel| channel.guild_id).await {
@@ -255,6 +261,7 @@ async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
 
 #[command]
 async fn queue(ctx: &Context, msg: &Message) -> CommandResult {
+    info!("Executing \"queue\" command");
 
     // Non ha senso se è un canale privato, ottiene id della gilda
     let guild_id = match ctx.cache.guild_channel_field(msg.channel_id, |channel| channel.guild_id).await {

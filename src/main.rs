@@ -26,6 +26,9 @@ use std::io::{Write};
 use tokio::time;
 use rand::prelude::*;
 
+use tracing::{info, warn};
+use tracing_subscriber;
+
 use serenity::{
     async_trait,
     model::{
@@ -71,11 +74,14 @@ type Failable<T> = Result<T, Box<dyn Error + Send + Sync>>;
 async fn main() -> Failable<()> {
     dotenv::dotenv().ok();
 
+    // Carica contesto di tracing
+    tracing_subscriber::fmt::init();
+
     let redis_url = std::env::var("REDIS_URL")?;
     let token = std::env::var("DISCORD_TOKEN")?;   
     
-    println!("\n{}", LOGO);
-    println!("\n================================= INITIALIZATION =================================\n");
+    print!("\n{}", LOGO);
+    print!("\n================================= INITIALIZATION =================================\n");
 
     print!("[INFO] Connecting to Redis server at {} ... ", redis_url);
     std::io::stdout().flush().unwrap();
@@ -172,7 +178,7 @@ impl EventHandler for DiscordiaEventHandler
             // Cerca risposta
             match redis.generate_response(filter).unwrap() {
                 Some(response) => commands::embed_decrease_exp(&ctx, &msg, &response, OTHER_BOT_DAMANGE_EXP).await,
-                None => eprintln!("[WARN] No response found"),
+                None => warn!("[WARN] No response found"),
             }
 
             // Ottiene anima e decrementa l'exp mostrando il risultato su Discord
@@ -186,7 +192,7 @@ impl EventHandler for DiscordiaEventHandler
                 // Cerca risposta
                 match redis.generate_response(filter).unwrap() {
                     Some(response) => commands::embed_level_down(&ctx, &msg, &response, old, new).await,
-                    None => eprintln!("[WARN] No response found"),
+                    None => warn!("[WARN] No response found"),
                 }
             }
 

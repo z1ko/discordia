@@ -1,4 +1,5 @@
 
+use tracing::{info, warn};
 use prettytable::{Table, Cell, Row, format};
 use serenity::{
     framework::standard::{
@@ -30,6 +31,7 @@ pub struct Misc;
 
 #[command]
 async fn ping(ctx: &Context, msg: &Message) -> CommandResult {
+    info!("Executing \"ping\" command");
     msg.reply(&ctx.http, "pong!").await?;
     Ok(())
 }
@@ -40,6 +42,7 @@ async fn ping(ctx: &Context, msg: &Message) -> CommandResult {
 
 #[command]
 pub async fn profile(ctx: &Context, msg: &Message) -> CommandResult {
+    info!("Executing \"profile\" command");
     
     // =====================================================================
     // Ottiene anima tramite lock
@@ -87,6 +90,7 @@ pub async fn profile(ctx: &Context, msg: &Message) -> CommandResult {
 
 #[command]
 pub async fn balance(ctx: &Context, msg: &Message) -> CommandResult {
+    info!("Executing \"balance\" command");
 
     // =====================================================================
     // Ottiene anima tramite lock
