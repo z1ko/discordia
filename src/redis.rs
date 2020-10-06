@@ -118,12 +118,16 @@ impl Redis {
             }
         }
 
+        println!("[INFO] Trovati {} gruppi di risposte soddisfacenti:", winners.len());
+
         // Ottiene i gruppi che hanno lo score più alto
         let winners = winners.into_iter().filter(|(_, score)| *score == winner_score)
-            .map(|(group, _)| group).collect::<Vec<String>>();
+            .map(|(group, score)| { println!("\tgroup: {}, score: {}", group, score); group })
+            .collect::<Vec<String>>();
 
         // Ne sceglie uno a caso e ottiene anche una risposta a caso
         if let Some(group) = winners.choose(&mut rand::thread_rng()) {
+            println!("[INFO] Vinctore => group: {}", group);
             if let Some(result) = self.get_group_data(&group)?.choose(&mut rand::thread_rng()) {
                 return Ok(Some(result.clone()));
             }
