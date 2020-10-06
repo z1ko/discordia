@@ -14,7 +14,8 @@ use serenity::{
 };
 
 use crate::{
-    redis::{Redis, RedisMapKey},
+    affinity::Affinity,
+    redis::{RedisMapKey},
 };
 
 //
@@ -66,8 +67,7 @@ pub async fn profile(ctx: &Context, msg: &Message) -> CommandResult {
     table.set_format(*format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
 
     table.add_row(row!["money", anima.money]);
-    table.add_row(row!["level", anima.level]);
-    table.add_row(row!["  exp",   anima.exp]);
+    table.add_row(row!["affinity", Affinity::from_score(anima.affinity_score)]);
 
     // =====================================================================
     // Crea messaggio embedded

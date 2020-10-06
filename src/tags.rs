@@ -131,12 +131,11 @@ impl Filter {
             // Se è opzionale e non presente allora non aumenta lo score
             if optional && !contains { 
                 println!("Optional value not found: {}", tag.string());
-                score -= 1;
                 continue;
             }
 
             // Tutti gli altri casi aumenta il punteggio
-            score += 2;
+            score += 1;
         }
 
         FilterResult::Passed(score)

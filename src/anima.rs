@@ -1,28 +1,38 @@
 
+use crate::affinity::{Affinity, AffinityChange};
+
 #[derive(Debug, Clone)]
 pub struct Anima 
 {
     pub money: u32,
     pub affinity_score: u8,
-
-    pub level: u32,
-    pub exp:   i32
 }
 
 impl Anima {
-    pub fn new(money: u32, level: u32, exp: i32, affinity_score: u8) -> Self {
+    pub fn new(money: u32, affinity_score: u8) -> Self {
         Self {
-            money, level, exp,
-            affinity_score,
+            money, affinity_score,
         }
     }
 
-    pub fn affinity_sub(&mut self, value: u8) {
-        self.affinity_score.saturating_sub(value);
+    pub fn affinity_sub(&mut self, value: u8) -> AffinityChange 
+    {
+        let old = Affinity::from_score(self.affinity_score);
+        self.affinity_score = self.affinity_score.saturating_sub(value);
+        let new = Affinity::from_score(self.affinity_score);
+
+        if old == new { AffinityChange::Some(old, new) } 
+                 else { AffinityChange::None }
     }
 
-    pub fn affinity_add(&mut self, value: u8) {
-        self.affinity_score.saturating_add(value);
+    pub fn affinity_add(&mut self, value: u8) -> AffinityChange 
+    {
+        let old = Affinity::from_score(self.affinity_score);
+        self.affinity_score = self.affinity_score.saturating_add(value);
+        let new = Affinity::from_score(self.affinity_score);
+    
+        if old == new { AffinityChange::Some(old, new) } 
+                 else { AffinityChange::None }
     }
 }
 
@@ -117,6 +127,7 @@ pub mod exp
     }
 }
 
+/*
 // L'anima ovviamente può salire di livello
 impl exp::Levelling for Anima
 {
@@ -157,3 +168,4 @@ impl exp::Levelling for Anima
     // Esperienza per il prossimo livello
     fn experience(&self) -> i32 { exp::experience(self.level) }
 }
+*/

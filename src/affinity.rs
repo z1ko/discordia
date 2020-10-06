@@ -1,7 +1,7 @@
 
 use std::fmt;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Affinity
 {
     Hate,
@@ -34,4 +34,11 @@ impl Affinity {
             241 ..= 255 => Affinity::Love,
         }
     }
+}
+
+// Rappresenta un cambiamento di livello di affinità
+pub enum AffinityChange 
+{
+    Some(Affinity, Affinity),
+    None,
 }

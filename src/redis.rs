@@ -4,6 +4,9 @@
  */
 
 
+use std::error::Error;
+use std::future::Future;
+
 use redis::{
     Commands, Client, RedisResult, Connection
 };
@@ -40,20 +43,22 @@ impl Redis {
         let key = format!("anima:{}", id);
 
         // Se non esiste la crea nuova
-        if !self.con.exists(&key)? 
+        if !self.con.exists(&key)?
         {
             self.con.hset(&key, "money",            0)?;
             self.con.hset(&key, "affinity_score", 127)?;
-            self.con.hset(&key, "level",            1)?;
-            self.con.hset(&key, "exp",              0)?;
+        }
+
+        // Aggiunge al set di utenti
+        if !self.con.sismember("animas", &key)? 
+        {
+            self.con.sadd("animas", &key)?;
         }
 
         let money = self.con.hget(&key, "money")?;
         let score = self.con.hget(&key, "affinity_score")?;
-        let level = self.con.hget(&key, "level")?;
-        let exp   = self.con.hget(&key, "exp")?;
 
-        Ok(Anima::new(money, level, exp, score))
+        Ok(Anima::new(money, score))
     }
 
     // Salva o aggiorna la nuova anima nel database
@@ -62,10 +67,21 @@ impl Redis {
 
         self.con.hset(&key, "money",          anima.money)?;
         self.con.hset(&key, "affinity_score", anima.affinity_score)?;
-        self.con.hset(&key, "level",          anima.level)?;
-        self.con.hset(&key, "exp",            anima.exp)?;
 
         Ok(())
+    }
+
+    // Modifica un'anima in una closure
+    pub async fn anima<F, R>(&mut self, id: u64, func: F)
+    where
+        F: FnOnce(Anima) -> R,
+        R: Future<Output = Anima>
+    {
+        if let Ok(anima) = self.get_anima(id) {
+            let anima = func(anima).await;
+            self.set_anima(id, &anima)
+                .expect("Impossibile settare anima");
+        }
     }
 
     // Ottiene le risposte conosciute

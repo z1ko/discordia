@@ -3,6 +3,7 @@ use std::error::Error;
 use std::fmt;
 
 use crate::anima::exp::Rank;
+use crate::affinity::Affinity;
 
 use serenity::{
     framework::standard::{
@@ -128,5 +129,32 @@ pub async fn embed_level_down(ctx: &Context, msg: &Message, response: &str, old:
             e
         })
     })
+    .await.unwrap();
+}
+
+// Cambiamento di punteggio affinità
+pub async fn embed_affinity_score_change(ctx: &Context, msg: &Message, response: &str, change: i8) {
+    let symbol = if change >= 0 { '+' } else { '-' };
+    msg.channel_id.send_message(&ctx.http, |m| {
+        m.embed(|e| {
+            e.description(format!("{}```diff\n{} {} punti\n```", 
+                response, symbol, change.abs()));
+            e
+        })
+    })
+    .await.unwrap();
+}
+
+// Cambiamento di livello affinità
+pub async fn embed_affinity_level_change(ctx: &Context, msg: &Message, response: &str, old: Affinity, new: Affinity) {
+    msg.channel_id.send_message(&ctx.http, |m| {
+        m.embed(|e| {
+            e.title(format!("Cambiamento di affinità per {}", &msg.author.name));
+            e.description(format!("{}", response));
+            e.field("Precedente", format!("```yaml\n{}\n```", old), true);
+            e.field("Attuale", format!("```fix\n{}\n```", new), true);
+            e
+        })
+    })  
     .await.unwrap();
 }

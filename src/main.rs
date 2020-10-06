@@ -63,6 +63,7 @@ use crate::{
     tags::{
         Tag, Filter
     },
+    affinity::{Affinity, AffinityChange},
     commands::{Commands, misc::*, music::*},
     music::{Orchestra, OrchestraMapKey},
 };
@@ -89,14 +90,6 @@ async fn main() -> Failable<()> {
     let redis = Arc::new(Mutex::new(Redis::connect(&redis_url)
         .expect("Error connecting to Redis server")));
     println!("[OK]");
-
-    // TODO: Carica info sullo stato corrente
-    //let http = Http::new_with_token(&token);
-    //let root = match http.get_current_application_info().await {
-    //    Ok(info) => info.owner.id,
-    //    Err(_)   => panic!("Owner not found"),
-    //};
-    //println!("[INFO] Current root user: {}", root);
 
     // Crea framework di base
     let framework = StandardFramework::new()
@@ -135,7 +128,7 @@ async fn main() -> Failable<()> {
 }
 
 // Danno di exp per usare un altro bot
-const OTHER_BOT_DAMANGE_EXP: i32 = 100;
+const OTHER_BOT_DAMANGE_EXP: i8 = -50;
 
 // Controller principale del bot
 struct DiscordiaEventHandler;
@@ -146,7 +139,7 @@ impl EventHandler for DiscordiaEventHandler
     /**
      * Gestisce la coda della musica
      */
-    async fn ready(&self, ctx: Context, ready: Ready) {
+    async fn ready(&self, ctx: Context, _: Ready) {
       
         let mut interval = time::interval(time::Duration::from_secs(1));
         loop {
@@ -177,7 +170,7 @@ impl EventHandler for DiscordiaEventHandler
 
             // Cerca risposta
             match redis.generate_response(filter).unwrap() {
-                Some(response) => commands::embed_decrease_exp(&ctx, &msg, &response, OTHER_BOT_DAMANGE_EXP).await,
+                Some(response) => commands::embed_affinity_score_change(&ctx, &msg, &response, OTHER_BOT_DAMANGE_EXP).await,
                 None => {
                     msg.channel_id.say(&ctx.http, "[WARN] No response found").await.unwrap();
                 }
@@ -185,7 +178,7 @@ impl EventHandler for DiscordiaEventHandler
 
             // Ottiene anima e decrementa l'exp mostrando il risultato su Discord
             let mut anima = redis.get_anima(msg.author.id.0).unwrap();
-            if let LevelChange::Delta(old, new) = anima.decrease_exp(OTHER_BOT_DAMANGE_EXP) 
+            if let AffinityChange::Some(old, new) = anima.affinity_sub(OTHER_BOT_DAMANGE_EXP.abs() as u8) 
             {
                 let filter = Filter::new()
                     .tag(Tag::Anima(msg.author.id.0))
@@ -193,7 +186,7 @@ impl EventHandler for DiscordiaEventHandler
 
                 // Cerca risposta
                 match redis.generate_response(filter).unwrap() {
-                    Some(response) => commands::embed_level_down(&ctx, &msg, &response, old, new).await,
+                    Some(response) => commands::embed_affinity_level_change(&ctx, &msg, &response, old, new).await,
                     None => {
                         msg.channel_id.say(&ctx.http, "[WARN] No response found").await.unwrap();
                     }
@@ -210,32 +203,15 @@ impl EventHandler for DiscordiaEventHandler
 //
 
 #[hook]
-async fn before(ctx: &Context, msg: &Message, cmd: &str) -> bool {
-    println!("[INFO] Command {} from {}", cmd, msg.author.name);
-
+async fn before(ctx: &Context, msg: &Message, cmd: &str) -> bool 
+{
     let mut data = ctx.data.write().await;
     let mutex = data.get_mut::<RedisMapKey>().unwrap().clone();
     let mut redis = mutex.lock().await;
 
-    // Calcola probabilità di non eseguire il comando
-    let anima = redis.get_anima(msg.author.id.0).unwrap();
-    let prob = -(2.0_f32).powf(-(0.7_f32) * anima.level as f32) + 1.0_f32;
-    
-    // Descide se eseguire il comando, e in base a quello
-    // crea un filtro corretto 
-    let execute = rand::thread_rng().gen::<f32>() > prob;
-    let filter = if execute
-    {
-        Filter::new()
-            .tag(Tag::Anima(msg.author.id.0))
-            .tag(Tag::NoExec)
-    }
-    else
-    {
-        Filter::new()
-            .tag(Tag::Command(Commands::from_str(cmd).unwrap()))
-            .tag(Tag::Anima(msg.author.id.0))
-    };
+    let filter = Filter::new()
+        .tag(Tag::Command(Commands::from_str(cmd).unwrap()))
+        .tag(Tag::Anima(msg.author.id.0));
 
     // Printa risposta sul canale
     match redis.generate_response(filter).unwrap() {
@@ -253,7 +229,7 @@ async fn before(ctx: &Context, msg: &Message, cmd: &str) -> bool {
         },
     }
 
-    execute
+    true
 }
 
 //
@@ -261,15 +237,18 @@ async fn before(ctx: &Context, msg: &Message, cmd: &str) -> bool {
 //
 
 #[hook]
-async fn after(ctx: &Context, msg: &Message, command_name: &str, command_result: CommandResult) {
+async fn after(ctx: &Context, msg: &Message, command_name: &str, command_result: CommandResult) 
+{
     match command_result {
         Err(why) => eprintln!("Command '{}' returned error {:?}", command_name, why),
         Ok(()) => {          
 
             // Ottiene aumento exp dei comandi
             let command = Commands::from_str(command_name).unwrap();
-            let change = match command {
-                Commands::Play => 50,
+            let change: i8 = match command {
+                Commands::Play    => 6,
+                Commands::Balance => 2,
+                Commands::Profile => 2,
                 _ => 0,
             };  
 
@@ -279,71 +258,35 @@ async fn after(ctx: &Context, msg: &Message, command_name: &str, command_result:
                 let mutex = data.get_mut::<RedisMapKey>().unwrap().clone();
                 let mut redis = mutex.lock().await;
 
+                let filter = Filter::new()
+                    .tag(Tag::Anima(msg.author.id.0))
+                    .tag(Tag::UserExpUp);
+
                 // Cerca risposta
-                match redis.generate_response(Filter::new().tag(Tag::UserExpUp)).unwrap() {
-                    Some(response) => commands::embed_increase_exp(&ctx, &msg, &response, change).await,
+                match redis.generate_response(filter).unwrap() {
+                    Some(response) => commands::embed_affinity_score_change(&ctx, &msg, &response, change).await,
                     None => {
-                        msg.channel_id.say(&ctx.http, "[WARN] No response found").await.unwrap();
+                        //msg.channel_id.say(&ctx.http, "[WARN] No response found").await.unwrap();
                     }
                 }
 
                 // Ottiene anima e decrementa l'exp mostrando il risultato su Discord
                 let mut anima = redis.get_anima(msg.author.id.0).unwrap();
-                if let LevelChange::Delta(old, new) = anima.increase_exp(change) 
+                if let AffinityChange::Some(old, new) = anima.affinity_add(change as u8) 
                 {
-                    match redis.generate_response(Filter::new().tag(Tag::UserLevelDown)).unwrap() {
-                        Some(response) => commands::embed_level_up(&ctx, &msg, &response, old, new).await,
+                    let filter = Filter::new()
+                        .tag(Tag::Anima(msg.author.id.0))
+                        .tag(Tag::UserLevelUp);
+
+                    match redis.generate_response(filter).unwrap() {
+                        Some(response) => commands::embed_affinity_level_change(&ctx, &msg, &response, old, new).await,
                         None => {
-                            msg.channel_id.say(&ctx.http, "[WARN] No response found").await.unwrap();
+                            //msg.channel_id.say(&ctx.http, "[WARN] No response found").await.unwrap();
                         }
                     }
                 }
 
                 redis.set_anima(msg.author.id.0, &anima).unwrap();
-            }
-        }
-    }
-}
-
-// Pattern di modifica riutilizzati
-mod helpers
-{
-    use super::*;
-
-    pub async fn decrease_exp(ctx: &Context, msg: &Message, redis: &mut Redis, anima_id: u64, delta: i32)
-    {
-        let mut anima = redis.get_anima(anima_id).unwrap();
-        if let LevelChange::Delta(old, new) = anima.decrease_exp(delta) 
-        {
-            let filter = Filter::new()
-                .tag(Tag::Anima(anima_id))
-                .tag(Tag::UserLevelDown);
-
-            // Cerca risposta
-            match redis.generate_response(filter).unwrap() {
-                Some(response) => commands::embed_level_down(&ctx, &msg, &response, old, new).await,
-                None => {
-                    msg.channel_id.say(&ctx.http, "[WARN] No response found").await.unwrap();
-                }
-            }
-        }
-    }
-
-    pub async fn increase_exp(ctx: &Context, msg: &Message, redis: &mut Redis, anima_id: u64, delta: i32)
-    {
-        let mut anima = redis.get_anima(anima_id).unwrap();
-        if let LevelChange::Delta(old, new) = anima.increase_exp(delta)
-        {
-            let filter = Filter::new()
-                .tag(Tag::Anima(anima_id))
-                .tag(Tag::UserLevelUp);
-
-            // Cerca risposta
-            match redis.generate_response(filter).unwrap() {
-                Some(response) => commands::embed_level_up(&ctx, &msg, &response, old, new).await,
-                None => {
-                    msg.channel_id.say(&ctx.http, "[WARN] No response found").await.unwrap();
-                }
             }
         }
     }
