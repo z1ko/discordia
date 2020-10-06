@@ -217,7 +217,6 @@ async fn before(ctx: &Context, msg: &Message, cmd: &str) -> bool {
     let filter = if execute
     {
         Filter::new()
-            .tag(Tag::Command(Commands::from_str(cmd).unwrap()))
             .tag(Tag::Anima(msg.author.id.0))
             .tag(Tag::NoExec)
     }
