@@ -3,15 +3,26 @@
 pub struct Anima 
 {
     pub money: u32,
+    pub affinity_score: u8,
+
     pub level: u32,
     pub exp:   i32
 }
 
 impl Anima {
-    pub fn new(money: u32, level: u32, exp: i32) -> Self {
-        Self { 
-            money, level, exp
+    pub fn new(money: u32, level: u32, exp: i32, affinity_score: u8) -> Self {
+        Self {
+            money, level, exp,
+            affinity_score,
         }
+    }
+
+    pub fn affinity_sub(&mut self, value: u8) {
+        self.affinity_score.saturating_sub(value);
+    }
+
+    pub fn affinity_add(&mut self, value: u8) {
+        self.affinity_score.saturating_add(value);
     }
 }
 

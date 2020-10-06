@@ -1,60 +1,9 @@
 
-// Tutti i comandi possibili
-#[derive(Debug, Clone)]
-pub enum Commands
-{
-    Ping,
-
-    Play,
-    Loop,
-    Stop,
-    Pause,
-    Unpause,
-}
-
-// Devono essere minuscoli nel database
-impl std::fmt::Display for Commands {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> { 
-        let result = match self {
-            Commands::Ping    => "ping",
-            Commands::Play    => "play",
-            Commands::Loop    => "loop",
-            Commands::Stop    => "stop",
-            Commands::Pause   => "pause",
-            Commands::Unpause => "unpause",
-        };
-        write!(fmt, "{}", result)
-     }
-}
-
-// Tutti le possibili Affinità
-#[derive(Debug, Clone)]
-pub enum Affinities
-{
-    Hate,
-    Annoyance,
-    Neutral,
-    Friend,
-    Love
-}
-
-// Devono essere minuscoli nel database
-impl std::fmt::Display for Affinities {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> { 
-        let result = match self {
-            Affinities::Hate       => "hate",
-            Affinities::Annoyance  => "annoyance",
-            Affinities::Neutral    => "neutral",
-            Affinities::Friend     => "friend",
-            Affinities::Love       => "love",
-        };
-        write!(fmt, "{}", result)
-     }
-}
-
+use crate::affinity::Affinity;
+use crate::commands::Commands;
 
 // Possibili tag usabili nei gruppi delle risposte
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum Tag
 {
     // Indica che il gruppo viene usato per le risposte speciali
@@ -74,11 +23,11 @@ pub enum Tag
 
     // Indica che il gruppo va utilizzato su almeno questo 
     // livello di affinità, possono essercene più di uno per gruppo
-    Affinity(Affinities),
+    Affinity(Affinity),
 
     // Indica che il gruppo va utilizzato su questo comando
     // può essercene uno solo per gruppo
-    Command(String),
+    Command(Commands),
 
     // Indica che il gruppo va utilizzato per uno specifico utente
     // ma se non è presente non fallisce

@@ -14,8 +14,7 @@ use rand::prelude::SliceRandom;
 use crate::{
     anima::Anima,
     tags::{
-        Tag, Affinities,
-        Filter, FilterResult,
+        Tag, Filter, FilterResult,
     }
 };
 
@@ -43,25 +42,28 @@ impl Redis {
         // Se non esiste la crea nuova
         if !self.con.exists(&key)? 
         {
-            self.con.hset(&key, "money", 0)?;
-            self.con.hset(&key, "level", 1)?;
-            self.con.hset(&key,   "exp", 0)?;
+            self.con.hset(&key, "money",            0)?;
+            self.con.hset(&key, "affinity_score", 127)?;
+            self.con.hset(&key, "level",            1)?;
+            self.con.hset(&key, "exp",              0)?;
         }
 
         let money = self.con.hget(&key, "money")?;
+        let score = self.con.hget(&key, "affinity_score")?;
         let level = self.con.hget(&key, "level")?;
-        let exp   = self.con.hget(&key,   "exp")?;
+        let exp   = self.con.hget(&key, "exp")?;
 
-        Ok(Anima::new(money, level, exp))
+        Ok(Anima::new(money, level, exp, score))
     }
 
     // Salva o aggiorna la nuova anima nel database
     pub fn set_anima(&mut self, id: u64, anima: &Anima) -> RedisResult<()> {
         let key = format!("anima:{}", id);
 
-        self.con.hset(&key, "money", anima.money)?;
-        self.con.hset(&key, "level", anima.level)?;
-        self.con.hset(&key,   "exp",   anima.exp)?;
+        self.con.hset(&key, "money",          anima.money)?;
+        self.con.hset(&key, "affinity_score", anima.affinity_score)?;
+        self.con.hset(&key, "level",          anima.level)?;
+        self.con.hset(&key, "exp",            anima.exp)?;
 
         Ok(())
     }

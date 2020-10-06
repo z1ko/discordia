@@ -20,6 +20,59 @@ pub mod misc;
 pub mod music;
 
 // ================================================================
+// Lista di tutti i comandi utilizzabili
+// ================================================================
+
+#[derive(Debug, Clone, Copy)]
+pub enum Commands
+{
+    Ping, Profile, Balance,         // MISC
+    Join, Leave, Play, Stop, Skip   // MUSIC
+}
+
+impl Commands {
+    // Modifca all'affinità causata da ogni comando
+    pub fn affinity_change(&self) -> i8 {
+        match self {
+            Commands::Play => 50,
+            _ => 0
+        }
+    }
+
+    // Da una stringa ottiene il comando associato
+    pub fn from_str(name: &str) -> Option<Self> {
+        match name {
+            "ping"    => Some(Commands::Ping),
+            "profile" => Some(Commands::Profile),
+            "balance" => Some(Commands::Balance),
+            "join"    => Some(Commands::Join),
+            "leave"   => Some(Commands::Leave),
+            "play"    => Some(Commands::Play),
+            "stop"    => Some(Commands::Stop),
+            "skip"    => Some(Commands::Skip),
+            _         => None,
+        }
+    } 
+}
+
+// Devono essere minuscoli nel database
+impl std::fmt::Display for Commands {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> { 
+        let result = match self {
+            Commands::Ping    => "ping",
+            Commands::Profile => "profile",
+            Commands::Balance => "balance",
+            Commands::Join    => "join",
+            Commands::Leave   => "leave",
+            Commands::Play    => "play",
+            Commands::Stop    => "stop",
+            Commands::Skip    => "skip",
+        };
+        write!(fmt, "{}", result)
+     }
+}
+
+// ================================================================
 // Risposte embedded classiche
 // ================================================================
 

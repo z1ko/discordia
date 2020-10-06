@@ -14,6 +14,7 @@ mod anima;
 mod commands;
 mod tags;
 mod music;
+mod affinity;
 
 #[macro_use] 
 extern crate prettytable;
@@ -57,9 +58,9 @@ use crate::{
         Anima
     },
     tags::{
-        Tag, Filter, Commands
+        Tag, Filter
     },
-    commands::{misc::*, music::*},
+    commands::{Commands, misc::*, music::*},
     music::{Orchestra, OrchestraMapKey},
 };
 
@@ -144,7 +145,7 @@ impl EventHandler for DiscordiaEventHandler
         let mut interval = time::interval(time::Duration::from_secs(1));
         loop {
             let mut data = ctx.data.write().await;
-            let mut orchesta = data.get_mut::<OrchestraMapKey>().unwrap();
+            let orchesta = data.get_mut::<OrchestraMapKey>().unwrap();
             orchesta.update().await;
 
             // Dorme per 1 secondi
@@ -161,13 +162,15 @@ impl EventHandler for DiscordiaEventHandler
         if msg.content.starts_with("!") || msg.content.starts_with("-")
         {
             let mut data = ctx.data.write().await;
-            let mutex = data.get_mut::<RedisMapKey>()
-                .unwrap().clone();
-            
+            let mutex = data.get_mut::<RedisMapKey>().unwrap().clone();
             let mut redis = mutex.lock().await;
     
+            let filter = Filter::new()
+                .tag(Tag::Anima(msg.author.id.0))
+                .tag(Tag::UsedOtherBot);
+
             // Cerca risposta
-            match redis.generate_response(Filter::new().tag(Tag::UsedOtherBot)).unwrap() {
+            match redis.generate_response(filter).unwrap() {
                 Some(response) => commands::embed_decrease_exp(&ctx, &msg, &response, OTHER_BOT_DAMANGE_EXP).await,
                 None => eprintln!("[WARN] No response found"),
             }
@@ -176,14 +179,19 @@ impl EventHandler for DiscordiaEventHandler
             let mut anima = redis.get_anima(msg.author.id.0).unwrap();
             if let LevelChange::Delta(old, new) = anima.decrease_exp(OTHER_BOT_DAMANGE_EXP) 
             {
-                match redis.generate_response(Filter::new().tag(Tag::UserLevelDown)).unwrap() {
+                let filter = Filter::new()
+                    .tag(Tag::Anima(msg.author.id.0))
+                    .tag(Tag::UserLevelDown);
+
+                // Cerca risposta
+                match redis.generate_response(filter).unwrap() {
                     Some(response) => commands::embed_level_down(&ctx, &msg, &response, old, new).await,
                     None => eprintln!("[WARN] No response found"),
                 }
             }
 
             redis.set_anima(msg.author.id.0, &anima).unwrap();
-        }        
+        }
     }
 }
 
@@ -196,51 +204,34 @@ async fn before(ctx: &Context, msg: &Message, cmd: &str) -> bool {
     println!("[INFO] Command {} from {}", cmd, msg.author.name);
 
     let mut data = ctx.data.write().await;
-    let mutex = data.get_mut::<RedisMapKey>().unwrap();
-
+    let mutex = data.get_mut::<RedisMapKey>().unwrap().clone();
     let mut redis = mutex.lock().await;
-    let anima = redis.get_anima(msg.author.id.0).unwrap();
 
     // Calcola probabilità di non eseguire il comando
-    let n = anima.level as f32;
-    let prob = -(2.0_f32).powf(-(0.7_f32) * n) + 1.0_f32;
+    let anima = redis.get_anima(msg.author.id.0).unwrap();
+    let prob = -(2.0_f32).powf(-(0.7_f32) * anima.level as f32) + 1.0_f32;
     
-    // Non esegue il comando
-    if rand::thread_rng().gen::<f32>() > prob 
+    // Descide se eseguire il comando, e in base a quello
+    // crea un filtro corretto 
+    let execute = rand::thread_rng().gen::<f32>() > prob;
+    let filter = if execute
     {
-        let filter = Filter::new()
-            .tag(Tag::Command(cmd.to_string()))
+        Filter::new()
+            .tag(Tag::Command(Commands::from_str(cmd).unwrap()))
+            .tag(Tag::Anima(msg.author.id.0))
             .tag(Tag::NoExec)
-            .tag(Tag::Anima(msg.author.id.0));
-        
-        match redis.generate_response(filter).unwrap() {
-            None => eprintln!("[WARN] No response found"),
-            Some(response) => 
-            {
-                // TODO
-                msg.channel_id.send_message(&ctx.http, |m| {
-                    m.embed(|e| {
-                        e.description(response);
-                        e
-                    })
-                })
-                .await.unwrap();
-            },
-        }
-
-        return false;
     }
+    else
+    {
+        Filter::new()
+            .tag(Tag::Command(Commands::from_str(cmd).unwrap()))
+            .tag(Tag::Anima(msg.author.id.0))
+    };
 
-    // Esegue il comando
-    let filter = Filter::new()
-        .tag(Tag::Command(cmd.to_string()))
-        .tag(Tag::Anima(msg.author.id.0));
-
+    // Printa risposta sul canale
     match redis.generate_response(filter).unwrap() {
         None => eprintln!("[WARN] No response found"),
-        Some(response) => 
-        {
-            // TODO
+        Some(response) => {
             msg.channel_id.send_message(&ctx.http, |m| {
                 m.embed(|e| {
                     e.description(response);
@@ -251,7 +242,7 @@ async fn before(ctx: &Context, msg: &Message, cmd: &str) -> bool {
         },
     }
 
-    true
+    execute
 }
 
 //
@@ -261,31 +252,31 @@ async fn before(ctx: &Context, msg: &Message, cmd: &str) -> bool {
 #[hook]
 async fn after(ctx: &Context, msg: &Message, command_name: &str, command_result: CommandResult) {
     match command_result {
-        Err(why) => println!("Command '{}' returned error {:?}", command_name, why),
-        Ok(()) => 
-        {
-            let mut data = ctx.data.write().await;
-            let mutex = data.get_mut::<RedisMapKey>()
-                .unwrap().clone();
-                
+        Err(why) => eprintln!("Command '{}' returned error {:?}", command_name, why),
+        Ok(()) => {          
+
             // Ottiene aumento exp dei comandi
-            let exp = match command_name {
-                ".play" => 100,
-                _ => 0
-            };
-                
-            if exp != 0 {
+            let command = Commands::from_str(command_name).unwrap();
+            let change = match command {
+                Commands::Play => 50,
+                _ => 0,
+            };  
+
+            if change != 0 
+            {
+                let mut data = ctx.data.write().await;
+                let mutex = data.get_mut::<RedisMapKey>().unwrap().clone();
                 let mut redis = mutex.lock().await;
 
                 // Cerca risposta
                 match redis.generate_response(Filter::new().tag(Tag::UserExpUp)).unwrap() {
-                    Some(response) => commands::embed_increase_exp(&ctx, &msg, &response, exp).await,
+                    Some(response) => commands::embed_increase_exp(&ctx, &msg, &response, change).await,
                     None => eprintln!("[WARN] No response found"),
                 }
 
                 // Ottiene anima e decrementa l'exp mostrando il risultato su Discord
                 let mut anima = redis.get_anima(msg.author.id.0).unwrap();
-                if let LevelChange::Delta(old, new) = anima.increase_exp(exp) 
+                if let LevelChange::Delta(old, new) = anima.increase_exp(change) 
                 {
                     match redis.generate_response(Filter::new().tag(Tag::UserLevelDown)).unwrap() {
                         Some(response) => commands::embed_level_up(&ctx, &msg, &response, old, new).await,
@@ -294,6 +285,46 @@ async fn after(ctx: &Context, msg: &Message, command_name: &str, command_result:
                 }
 
                 redis.set_anima(msg.author.id.0, &anima).unwrap();
+            }
+        }
+    }
+}
+
+// Pattern di modifica riutilizzati
+mod helpers
+{
+    use super::*;
+
+    pub async fn decrease_exp(ctx: &Context, msg: &Message, redis: &mut Redis, anima_id: u64, delta: i32)
+    {
+        let mut anima = redis.get_anima(anima_id).unwrap();
+        if let LevelChange::Delta(old, new) = anima.decrease_exp(delta) 
+        {
+            let filter = Filter::new()
+                .tag(Tag::Anima(anima_id))
+                .tag(Tag::UserLevelDown);
+
+            // Cerca risposta
+            match redis.generate_response(filter).unwrap() {
+                Some(response) => commands::embed_level_down(&ctx, &msg, &response, old, new).await,
+                None => eprintln!("[WARN] No response found"),
+            }
+        }
+    }
+
+    pub async fn increase_exp(ctx: &Context, msg: &Message, redis: &mut Redis, anima_id: u64, delta: i32)
+    {
+        let mut anima = redis.get_anima(anima_id).unwrap();
+        if let LevelChange::Delta(old, new) = anima.increase_exp(delta)
+        {
+            let filter = Filter::new()
+                .tag(Tag::Anima(anima_id))
+                .tag(Tag::UserLevelUp);
+
+            // Cerca risposta
+            match redis.generate_response(filter).unwrap() {
+                Some(response) => commands::embed_level_up(&ctx, &msg, &response, old, new).await,
+                None => eprintln!("[WARN] No response found"),
             }
         }
     }
