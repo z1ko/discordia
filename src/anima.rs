@@ -21,7 +21,7 @@ impl Anima {
         self.affinity_score = self.affinity_score.saturating_sub(value);
         let new = Affinity::from_score(self.affinity_score);
 
-        if old == new { AffinityChange::Some(old, new) } 
+        if old != new { AffinityChange::Some(old, new) } 
                  else { AffinityChange::None }
     }
 
@@ -31,7 +31,7 @@ impl Anima {
         self.affinity_score = self.affinity_score.saturating_add(value);
         let new = Affinity::from_score(self.affinity_score);
     
-        if old == new { AffinityChange::Some(old, new) } 
+        if old != new { AffinityChange::Some(old, new) } 
                  else { AffinityChange::None }
     }
 }
