@@ -178,7 +178,9 @@ impl EventHandler for DiscordiaEventHandler
             // Cerca risposta
             match redis.generate_response(filter).unwrap() {
                 Some(response) => commands::embed_decrease_exp(&ctx, &msg, &response, OTHER_BOT_DAMANGE_EXP).await,
-                None => warn!("[WARN] No response found"),
+                None => {
+                    msg.channel_id.say(&ctx.http, "[WARN] No response found").await.unwrap();
+                }
             }
 
             // Ottiene anima e decrementa l'exp mostrando il risultato su Discord
@@ -192,7 +194,9 @@ impl EventHandler for DiscordiaEventHandler
                 // Cerca risposta
                 match redis.generate_response(filter).unwrap() {
                     Some(response) => commands::embed_level_down(&ctx, &msg, &response, old, new).await,
-                    None => warn!("[WARN] No response found"),
+                    None => {
+                        msg.channel_id.say(&ctx.http, "[WARN] No response found").await.unwrap();
+                    }
                 }
             }
 
@@ -235,7 +239,9 @@ async fn before(ctx: &Context, msg: &Message, cmd: &str) -> bool {
 
     // Printa risposta sul canale
     match redis.generate_response(filter).unwrap() {
-        None => eprintln!("[WARN] No response found"),
+        None => {
+            msg.channel_id.say(&ctx.http, "[WARN] No response found").await.unwrap();
+        }
         Some(response) => {
             msg.channel_id.send_message(&ctx.http, |m| {
                 m.embed(|e| {
@@ -276,7 +282,9 @@ async fn after(ctx: &Context, msg: &Message, command_name: &str, command_result:
                 // Cerca risposta
                 match redis.generate_response(Filter::new().tag(Tag::UserExpUp)).unwrap() {
                     Some(response) => commands::embed_increase_exp(&ctx, &msg, &response, change).await,
-                    None => eprintln!("[WARN] No response found"),
+                    None => {
+                        msg.channel_id.say(&ctx.http, "[WARN] No response found").await.unwrap();
+                    }
                 }
 
                 // Ottiene anima e decrementa l'exp mostrando il risultato su Discord
@@ -285,7 +293,9 @@ async fn after(ctx: &Context, msg: &Message, command_name: &str, command_result:
                 {
                     match redis.generate_response(Filter::new().tag(Tag::UserLevelDown)).unwrap() {
                         Some(response) => commands::embed_level_up(&ctx, &msg, &response, old, new).await,
-                        None => eprintln!("[WARN] No response found"),
+                        None => {
+                            msg.channel_id.say(&ctx.http, "[WARN] No response found").await.unwrap();
+                        }
                     }
                 }
 
@@ -312,7 +322,9 @@ mod helpers
             // Cerca risposta
             match redis.generate_response(filter).unwrap() {
                 Some(response) => commands::embed_level_down(&ctx, &msg, &response, old, new).await,
-                None => eprintln!("[WARN] No response found"),
+                None => {
+                    msg.channel_id.say(&ctx.http, "[WARN] No response found").await.unwrap();
+                }
             }
         }
     }
@@ -329,7 +341,9 @@ mod helpers
             // Cerca risposta
             match redis.generate_response(filter).unwrap() {
                 Some(response) => commands::embed_level_up(&ctx, &msg, &response, old, new).await,
-                None => eprintln!("[WARN] No response found"),
+                None => {
+                    msg.channel_id.say(&ctx.http, "[WARN] No response found").await.unwrap();
+                }
             }
         }
     }
