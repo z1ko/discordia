@@ -35,7 +35,7 @@ impl TypeMapKey for VoiceMapKey {
 }
 
 #[group]
-#[commands(join, leave, play, stop, skip)]
+#[commands(join, leave, play, stop, skip, queue)]
 pub struct Music;
 
 //
@@ -102,7 +102,7 @@ async fn leave(ctx: &Context, msg: &Message) -> CommandResult {
         manager.remove(guild_id);
 
         // Resetta coda
-        let mut orchestra = data.get_mut::<OrchestraMapKey>().unwrap();
+        let orchestra = data.get_mut::<OrchestraMapKey>().unwrap();
         orchestra.reset().await;
 
         msg.channel_id.say(&ctx.http, "Ho lasciato il canale").await?;
@@ -167,7 +167,7 @@ async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 
         // Avvia la riproduzione ma pausa immediatamente, ci penserà l'orchestra
         // a far partire l'audio quando necessario
-        let mut orchestra = data.get_mut::<OrchestraMapKey>().unwrap();
+        let orchestra = data.get_mut::<OrchestraMapKey>().unwrap();
         let audio: LockedAudio = player.play_returning(source);
         orchestra.add(audio).await;
 
@@ -203,7 +203,7 @@ async fn stop(ctx: &Context, msg: &Message) -> CommandResult {
         player.stop();
 
         // Resetta coda
-        let mut orchestra = data.get_mut::<OrchestraMapKey>().unwrap();
+        let orchestra = data.get_mut::<OrchestraMapKey>().unwrap();
         orchestra.reset().await;
 
         msg.channel_id.say(&ctx.http, "Smetto di riprodurre la musica...").await?;
@@ -235,10 +235,10 @@ async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
         .unwrap().clone();
 
     let mut manager = mutex.lock().await;
-    if let Some(player) = manager.get_mut(guild_id) {
+    if let Some(_) = manager.get_mut(guild_id) {
 
         // Salta il brano
-        let mut orchestra = data.get_mut::<OrchestraMapKey>().unwrap();
+        let orchestra = data.get_mut::<OrchestraMapKey>().unwrap();
         orchestra.skip().await;
 
         msg.channel_id.say(&ctx.http, "Passo al prossimo brano...").await?;
@@ -249,3 +249,36 @@ async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
     Ok(())
 }
 
+//
+// Visualizza stato della coda musicale
+//
+
+#[command]
+async fn queue(ctx: &Context, msg: &Message) -> CommandResult {
+
+    // Non ha senso se è un canale privato, ottiene id della gilda
+    let guild_id = match ctx.cache.guild_channel_field(msg.channel_id, |channel| channel.guild_id).await {
+        Some(id) => id,
+        None => {
+            msg.channel_id.say(&ctx.http, "Non posso farlo qui").await?;
+            return Ok(());
+        },
+    };
+
+    let mut data = ctx.data.write().await;
+    let mutex = data.get_mut::<VoiceMapKey>()
+        .unwrap().clone();
+
+    let mut manager = mutex.lock().await;
+    if let Some(_) = manager.get_mut(guild_id) {
+
+        let orchestra = data.get_mut::<OrchestraMapKey>().unwrap();
+        let queue_count = orchestra.queue_count().await;
+
+        msg.channel_id.say(&ctx.http, format!("Brano presenti: {}", queue_count)).await?;
+        return Ok(());
+    }
+    
+    msg.channel_id.say(&ctx.http, "Ma non sto riproducendo nulla...").await?;
+    Ok(())
+}

@@ -26,8 +26,8 @@ pub mod music;
 #[derive(Debug, Clone, Copy)]
 pub enum Commands
 {
-    Ping, Profile, Balance,         // MISC
-    Join, Leave, Play, Stop, Skip   // MUSIC
+    Ping, Profile, Balance,                 // MISC
+    Join, Leave, Play, Stop, Skip, Queue    // MUSIC
 }
 
 impl Commands {
@@ -50,6 +50,7 @@ impl Commands {
             "play"    => Some(Commands::Play),
             "stop"    => Some(Commands::Stop),
             "skip"    => Some(Commands::Skip),
+            "queue"   => Some(Commands::Queue),
             _         => None,
         }
     } 
@@ -67,6 +68,7 @@ impl std::fmt::Display for Commands {
             Commands::Play    => "play",
             Commands::Stop    => "stop",
             Commands::Skip    => "skip",
+            Commands::Queue   => "queue",
         };
         write!(fmt, "{}", result)
      }

@@ -50,6 +50,12 @@ impl Orchestra {
         queue.pop_front();
     }
 
+    // Indica canzoni nella coda
+    pub async fn queue_count(&self) -> u32 {
+        let queue = self.queue.lock().await;
+        queue.len() as u32
+    }
+
     // Aggiorna lista e prova a riprodurre una nuova musica nella coda
     pub async fn update(&mut self) {
         
@@ -60,7 +66,7 @@ impl Orchestra {
             if let Some(audio) = queue.front_mut() 
             {
                 // Se il primo elemento è finito lo toglie
-                let mut audio = audio.lock().await;
+                let audio = audio.lock().await;
                 if audio.finished { 
                     pop = true; 
                 } 
