@@ -137,7 +137,7 @@ pub async fn embed_affinity_score_change(ctx: &Context, msg: &Message, response:
     let symbol = if change >= 0 { '+' } else { '-' };
     msg.channel_id.send_message(&ctx.http, |m| {
         m.embed(|e| {
-            e.description(format!("{}```diff\n{} {} punti\n```", 
+            e.description(format!("{}```diff\n{} {} punti affinità\n```", 
                 response, symbol, change.abs()));
             e
         })
