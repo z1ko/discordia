@@ -1,4 +1,6 @@
-FROM mcr.microsoft.com/windows/iotcore:1809
+FROM ubuntu:focal
+COPY ./target/debug/discordia /bin/discordia
 
-COPY ./target/debug/discordia.exe /tmp/discordia.exe
-CMD ["./tmp/discordia.exe"]
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt update && apt install -y ffmpeg youtube-dl
+RUN /bin/discordia
