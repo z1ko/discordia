@@ -1,5 +1,11 @@
 
-use crate::affinity::{Affinity, AffinityChange};
+use redis::{
+    Commands, Client, RedisResult, Connection
+};
+
+use crate::affinity::{Affinity, AffinityChange, AffinityScore};
+use crate::utils::Failable;
+use crate::redis::{Redis, RedisDAO};
 
 #[derive(Debug, Clone)]
 pub struct Anima 
@@ -33,6 +39,27 @@ impl Anima {
     
         if old != new { AffinityChange::Some(old, new) } 
                  else { AffinityChange::None }
+    }
+}
+
+impl RedisDAO<Anima, u64> for Anima {
+    fn from(redis: &mut Redis, key: u64) -> Failable<Self> 
+    {
+        // Se non presente nella base di dati lo crea
+        // In pratica il costruttore...
+
+        let key = format!("anima:{}", key);
+        if !redis.con.sismember("animas", &key)? 
+        {
+            redis.con.hset(&key, "money",            0)?;
+            redis.con.hset(&key, "affinity_score", 127)?;
+        }
+
+        // Carica dati
+        Ok(Self {
+            affinity_score: redis.con.hget(&key, "affinity_score")?,
+            money:          redis.con.hget(&key, "money")?,
+        })
     }
 }
 

@@ -42,3 +42,38 @@ pub enum AffinityChange
     Some(Affinity, Affinity),
     None,
 }
+
+pub enum AffinityLevel {
+    Hate, Annoyed,
+}
+
+// Semplifica operazioni sull'affinità
+pub struct AffinityScore {
+    level: AffinityLevel, 
+    score: u8 
+}
+
+impl AffinityScore 
+{
+    // Danneggià affinità e potenzialmente ritorna cambiamento in livello affinità
+    pub fn sub(&mut self, value: u8) -> Option<(Affinity, Affinity)> 
+    {
+        let old = Affinity::from_score(self.score);
+        self.score = self.score.saturating_sub(value);
+        let new = Affinity::from_score(self.score);
+
+        if old != new { Some((old, new)) }
+                 else { None }
+    }
+
+    // Ripristina affinità e potenzialmente ritorna cambiamento in livello affinità
+    pub fn add(&mut self, value: u8) -> Option<(Affinity, Affinity)> 
+    {
+        let old = Affinity::from_score(self.score);
+        self.score = self.score.saturating_add(value);
+        let new = Affinity::from_score(self.score);
+
+        if old != new { Some((old, new)) }
+                 else { None }
+    }
+}

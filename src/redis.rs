@@ -4,8 +4,9 @@
  */
 
 
-use std::error::Error;
 use std::future::Future;
+use serenity::prelude::*;
+use std::sync::Arc;
 
 use redis::{
     Commands, Client, RedisResult, Connection
@@ -15,6 +16,7 @@ use rand::prelude::*;
 use rand::prelude::SliceRandom;
 
 use crate::{
+    utils::Failable,
     anima::Anima,
     tags::{
         Tag, Filter, FilterResult,
@@ -22,10 +24,9 @@ use crate::{
 };
 
 // Rappresenta il server e una fabbrica di DAO
-pub struct Redis 
-{
-    client: Client,
-    con: Connection
+pub struct Redis {
+    pub client: Client,
+    pub con: Connection
 }
 
 impl Redis {
@@ -138,10 +139,18 @@ impl Redis {
     }
 }
 
-use serenity::prelude::*;
-use std::sync::Arc;
+//
+// Strutura caricabile dal database
+// 
 
+pub trait RedisDAO<Type, Key> {
+    fn from(redis: &mut Redis, key: Key) -> Failable<Type>;
+}
+
+//
 // Permette l'inserimento nei dati di serenity
+//
+
 pub struct RedisMapKey;
 impl TypeMapKey for RedisMapKey { 
     type Value = Arc<Mutex<Redis>>;

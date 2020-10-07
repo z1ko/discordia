@@ -13,8 +13,9 @@ mod redis;
 mod anima;
 mod commands;
 mod tags;
-mod music;
 mod affinity;
+mod utils;
+mod orchestra;
 
 #[macro_use] 
 extern crate prettytable;
@@ -65,7 +66,7 @@ use crate::{
     },
     affinity::{Affinity, AffinityChange},
     commands::{Commands, misc::*, music::*},
-    music::{Orchestra, OrchestraMapKey},
+    orchestra::{Orchestra, OrchestraMapKey},
 };
 
 // Per evitare di scrivere sto schifo
@@ -113,9 +114,8 @@ async fn main() -> Failable<()> {
     {
         let mut data = client.data.write().await;
         data.insert::<RedisMapKey>(redis.clone());
-        data.insert::<VoiceMapKey>(client.voice_manager.clone());
 
-        let orchestra = Orchestra::new();
+        let orchestra = Orchestra::new(client.voice_manager.clone());
         data.insert::<OrchestraMapKey>(orchestra);
     }
 
